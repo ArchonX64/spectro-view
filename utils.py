@@ -1,3 +1,4 @@
+import os.path
 import typing
 from typing import AnyStr
 from tkinter import messagebox
@@ -5,11 +6,21 @@ import numpy as np
 import pandas.errors
 import pandas as pd
 from xlsx2csv import Xlsx2csv
+import sys
 
 import gui
 import graph as gp
 
 import math
+
+
+def resource_path(rel_dir: str):
+    try:
+        # Does not exist until called by PyInstaller
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, rel_dir)
 
 
 class InvalidTypeException(Exception):
