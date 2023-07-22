@@ -1,8 +1,5 @@
 import sys
 from ctypes import windll
-import re
-
-import pandas
 
 import gui
 
