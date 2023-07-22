@@ -10,3 +10,6 @@ Using PyInstaller to Create An Executable:
 - SpectroView supports using pyinstaller to create easy to open executables on your device.
 - Once PyInstaller is downloaded, run PyInstaller in your command line along with the location of the "main.spec" file.
 - An executable will be created in a new "dist" folder in your project folder.
+
+This project is still in a very early stage, and the primary focus is making sure that this application is usable and useful.
+Refinements will be the next big step!
