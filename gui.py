@@ -32,8 +32,8 @@ class RootExpansion(tk.Tk):
         self.screen_width = float(self.winfo_screenwidth())
         self.screen_height = float(self.winfo_screenheight())
 
-        # self.icon = tk.PhotoImage(master=self, file="resources\\icon.png")
-        # self.wm_iconphoto(False, self.icon)
+        self.icon = tk.PhotoImage(master=self, file=utils.resource_path("icon.png"))
+        self.wm_iconphoto(False, self.icon)
 
     # Code for centering widget 'root' onto the center of the screen
     def center_root(self, width: Union[int, float], height: Union[int, float]):
