@@ -20,6 +20,7 @@ def resource_path(rel_dir: str):
         base_path = sys._MEIPASS
     except AttributeError:
         base_path = os.path.abspath(".")
+        rel_dir = "resources\\" + rel_dir
     return os.path.join(base_path, rel_dir)
 
 
