@@ -6,8 +6,7 @@ Supported Files: .csv, .cat, .ft, .txt, custom file types (WIP)
 Required Dependencies:
 pandas, matplotlib, tkinter, openpyxl, xlsx2csv, numpy, scipy
 
-Creating An Executable:
-- Install PyInstaller in any location
-- From cmd, call your location of PyInstaller along with the location of "main.spec"
-- Ex: "C:\Foo\PyInstaller.exe C:\Bar\main.spec"
-- Executable will appear in a newly created "dist" folder in the location of main.spec
+Using PyInstaller to Create An Executable:
+- SpectroView supports using pyinstaller to create easy to open executables on your device.
+- Once PyInstaller is downloaded, run PyInstaller in your command line along with the location of the "main.spec" file.
+- An executable will be created in a new "dist" folder in your project folder.
