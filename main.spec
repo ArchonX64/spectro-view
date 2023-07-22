@@ -6,9 +6,9 @@ block_cipher = None
 
 a = Analysis(
     ['main.py', 'gui.py', 'utils.py', 'peaky.py', 'data.py', 'graph.py'],
-    pathex=[],
+    pathex=["venv\lib"],
     binaries=[],
-    datas=[],
+    datas=[("resources//*.png", ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
