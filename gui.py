@@ -94,6 +94,7 @@ class App(RootExpansion):
         self.file_manager.add_and_gen(path=tk.filedialog.askopenfilename())
 
     def export_dataset(self):
+        print(self.sidebar.get_pressed())
         ExportDataWin(dataset=self.sidebar.get_pressed())
 
     def export_graph(self):
@@ -126,6 +127,12 @@ class App(RootExpansion):
             elif event.char == 'l':
                 diff = (gr.xmax - gr.xmin) * 0.005
                 gr.set_scale(xmin=gr.xmin + diff, xmax=gr.xmax + diff)
+            elif event.char == "2":
+                diff = (gr.ymax - gr.ymin) * 0.005
+                gr.set_scale(ymin=gr.ymin - diff, ymax=gr.ymax - diff)
+            elif event.char == "3":
+                diff = (gr.ymax - gr.ymin) * 0.005
+                gr.set_scale(ymin=gr.ymin + diff, ymax=gr.ymax + diff)
             self.main_pic.update_graph()
 
 
@@ -316,6 +323,7 @@ class Header(tk.Frame):
         self.peak_pick_button = tk.Button(master=self, command=self.peak_pick, text="Peak Pick")
         self.script_button = tk.Button(master=self, command=self.cus_script, text="Custom Script")
         self.ratio_sep_button = tk.Button(master=self, command=self.ratio_sep, text="Ratio Separate")
+        self.filter_known_button = tk.Button(master=self, command=self.filter_known, text="Filter Known")
 
         # Positioning
         self.graphing_message.grid(row=0, column=0, sticky='w')
@@ -327,6 +335,7 @@ class Header(tk.Frame):
         self.peak_pick_button.grid(row=1, column=2, padx=10, pady=5, sticky='w')
         self.script_button.grid(row=2, column=2, padx=10, pady=10, sticky='w')
         self.ratio_sep_button.grid(row=1, column=3, padx=10, pady=10, sticky='w')
+        self.filter_known_button.grid(row=2, column=3, padx=10, pady=10, sticky='w')
 
         self.grid_propagate(True)
 
@@ -353,7 +362,8 @@ class Header(tk.Frame):
             ZoomWindow(callback=self.zoom_callback)
 
     # Callback for ZoomWindow that provides necessary values
-    def zoom_callback(self, xmin: Union[float, int] = None, xmax: Union[float, int] = None, ymin: Union[float, int] = None,
+    def zoom_callback(self, xmin: Union[float, int] = None, xmax: Union[float, int] = None,
+                      ymin: Union[float, int] = None,
                       ymax: Union[float, int] = None, auto=False):
         self.root.sidebar.get_pressed().graph.set_scale(xmin, xmax, ymin, ymax, auto)
         self.root.main_pic.update_graph()
@@ -361,21 +371,25 @@ class Header(tk.Frame):
     # Creates a new window for selecting peaks
     def peak_pick(self):
         if self.root.sidebar.get_pressed() is not None:
-            PeakPickWindow(self.peak_pick_callback)
+            PeakPickWindow(self.root.sidebar.get_pressed(), self.peak_pick_callback)
 
     # Information provided by PeakPickWindow
     def peak_pick_callback(self, created_window, new_name, res, min_inten, max_inten):
         created_window.destroy()
         new_data = data.peak_pick(self.root.sidebar.get_pressed(), new_name, res, min_inten, max_inten)
-        self.root.data_storage.add_data(new_data)
+        self.root.data_storage.add_data(new_name, new_data)
 
     def cus_script(self):
         if self.root.sidebar.get_pressed() is not None:
             ScriptApp(self.root, self.root.sidebar.get_pressed())
 
     def ratio_sep(self):
-        if self.root.sidebar.get_pressed():
+        if self.root.sidebar.get_pressed() is not None:
             RatioWin(self.root, self.root.sidebar.get_pressed())
+
+    def filter_known(self):
+        if self.root.sidebar.get_pressed() is not None and len(self.root.sidebar.dataset_texts) > 1:
+            SimilarRemoveWindow(self.root, self.root.sidebar.get_pressed())
 
 
 # Frame for displaying the matplotlib graph
@@ -562,12 +576,13 @@ class ExcelFrame(tk.Frame):
 
 # Window for selecting the name of a certain dataset
 class DataInfoSelector(RootExpansion):
-    def __init__(self, data_columns, callback: Callable, is_gen: bool):
+    def __init__(self, name: AnyStr, data_columns, callback: Callable, is_gen: bool):
         super().__init__()
 
         # Callback
         self.callback = callback
         self.is_gen = is_gen
+        self.name = name
 
         # Customization
         self.title("Name")
@@ -575,7 +590,8 @@ class DataInfoSelector(RootExpansion):
 
         # Members
         self.name_text = tk.Message(master=self, text="Name of Dataset:", width=300)
-        self.name_box = tk.Entry(master=self, width=20)
+        self.name_var = tk.StringVar(self)
+        self.name_box = tk.Entry(master=self, width=20, textvariable=self.name_var)
 
         if is_gen:
             self.ax_text = tk.Message(master=self, text="Axis Containing Frequency:", width=300)
@@ -609,11 +625,12 @@ class DataInfoSelector(RootExpansion):
 
     # Send the name back to Data
     def enter(self):
-        if self.name_box.get() != "" and self.ax_option.get() != "":
-            self.callback(name=self.name_box.get(), ax=self.ax_option.get(), is_gen=self.is_gen)
-            self.destroy()
+        if self.name_var.get() == "":
+            name = self.name.split("/")[-1]
         else:
-            self.info_text_var.set("Please input a valid name")
+            name = self.name_var.get()
+        self.callback(name=name, ax=self.ax_option.get(), is_gen=self.is_gen)
+        self.destroy()
 
     # Allows pressing enter to proceed
     def on_press(self, event):
@@ -699,23 +716,24 @@ class ZoomWindow(RootExpansion):
 
 # Window for choosing options for peaky.py
 class PeakPickWindow(RootExpansion):
-    def __init__(self, callback: Callable):
+    def __init__(self, dataset: data.Data, callback: Callable):
         super().__init__()
 
         self.callback = callback
+        self.dataset = dataset
 
         # Members
         self.new_name_text = tk.Message(master=self, text="Name of Peak-Picked Set:", width=150)
         self.new_name_var = tk.StringVar(self)
         self.new_name_entry = tk.Entry(master=self, textvariable=self.new_name_var, width=10)
         self.inten_min_text = tk.Message(master=self, text="Min Intensity:", width=150)
-        self.inten_min_var = tk.StringVar(self)
+        self.inten_min_var = tk.StringVar(self, value="0.001")
         self.inten_min_entry = tk.Entry(master=self, textvariable=self.inten_min_var, width=10)
         self.inten_max_text = tk.Message(master=self, text="Max Intensity:", width=150)
-        self.inten_max_var = tk.StringVar(self)
+        self.inten_max_var = tk.StringVar(self, value="0.3")
         self.inten_max_entry = tk.Entry(master=self, textvariable=self.inten_max_var, width=10)
         self.res_adjust_text = tk.Message(master=self, text="Adjusted Resolution (MHz):", width=150)
-        self.res_adjust_var = tk.StringVar(self)
+        self.res_adjust_var = tk.StringVar(self, value="0.002")
         self.res_adjust_entry = tk.Entry(master=self, textvariable=self.res_adjust_var, width=10)
         self.enter_button = tk.Button(master=self, command=self.enter, text="Enter")
 
@@ -730,22 +748,22 @@ class PeakPickWindow(RootExpansion):
         self.res_adjust_entry.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
         self.enter_button.grid(row=6, column=0, columnspan=2, padx=10, pady=5)
 
-        # Base recommended values
-        self.res_adjust_var.set("0.002")  # Recommended resolution is 2 kHz
-
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
         self.resizable(False, False)
 
     def enter(self):
-        if self.new_name_var.get() != "":
-            try:
-                inten_min = float(self.inten_min_entry.get())
-                inten_max = float(self.inten_max_entry.get())
-                res = float(self.res_adjust_entry.get())
-            except ValueError:
-                return
-            self.callback(self, self.new_name_var.get(), res, inten_min, inten_max)
+        if self.new_name_var.get() == "":
+            name = self.dataset.name + " (peaks)"
+        else:
+            name = self.new_name_var.get()
+        try:
+            inten_min = float(self.inten_min_entry.get())
+            inten_max = float(self.inten_max_entry.get())
+            res = float(self.res_adjust_entry.get())
+        except ValueError:
+            return
+        self.callback(self, name, res, inten_min, inten_max)
 
 
 # WORK IN PROGRESS
@@ -1046,22 +1064,35 @@ class MergeWindow(RootExpansion):
         self.to_merge_message = tk.Message(master=self, text="Merge With:", width=300)
         self.to_merge_var = tk.StringVar(self)
         self.to_merge_box = ttk.Combobox(master=self, state="readonly")
+        self.combine_var = tk.IntVar(master=self, value=0)
+        self.combine_val_box = ttk.Checkbutton(master=self, variable=self.combine_var, text="Combine")
+        self.threshold_message = tk.Message(master=self, text="Threshold (KHz):", width=150)
+        self.threshold_var = tk.StringVar(master=self, value="10")
+        self.threshold_box = tk.Entry(master=self, textvariable=self.threshold_var)
         self.enter_button = tk.Button(master=self, command=self.enter, text="Enter")
 
         # Positioning
-        self.to_merge_message.grid(row=0, column=0, padx=20, pady=5)
-        self.to_merge_box.grid(row=1, column=0, padx=20, pady=5)
-        self.enter_button.grid(row=1, column=1, padx=20, pady=5)
+        self.to_merge_message.grid(row=0, column=0, columnspan=2, padx=20, pady=5)
+        self.to_merge_box.grid(row=1, column=0, columnspan=2, padx=20, pady=5)
+        self.combine_val_box.grid(row=2, column=0, rowspan=2, padx=10)
+        self.threshold_message.grid(row=2, column=1, padx=10, pady=5)
+        self.threshold_box.grid(row=3, column=1, padx=10, pady=5)
+        self.enter_button.grid(row=4, column=0, columnspan=2, padx=20, pady=5)
 
         # Customization
         self.to_merge_box['values'] = data_list
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
+        self.resizable(False, False)
 
     def enter(self):
         if self.to_merge_box.get() != "":
-            self.callback(self.to_merge_box.get())
+            try:
+                thresh = int(self.threshold_var.get())
+            except ValueError:
+                return
+            self.callback(self.to_merge_box.get(), bool(self.combine_var.get()), thresh)
             self.destroy()
 
 
@@ -1080,7 +1111,7 @@ class MergeConflictWindow(RootExpansion):
         self.vars = []
         self.entries = []
         index = 0
-        for column in right.data_frame.columns + left.data_frame.columns:
+        for column in right.data_frame.columns.values.tolist() + left.data_frame.columns.values.tolist():
             if column != right.freq_ax:
                 var = tk.StringVar(self, value=column)
                 entry = tk.Entry(master=self, textvariable=var)
@@ -1099,21 +1130,23 @@ class MergeConflictWindow(RootExpansion):
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
+        self.focus_force()
 
     def enter(self):
         name_map = {}
 
         index = 0
-        while index < len(self.right.data_frame.columns):
-            name_map[index] = self.vars[index]
+        while index < len(self.right.data_frame.columns.values.tolist()):
+            name_map[index] = self.vars[index].get()
             index += 1
         self.right.data_frame.rename(index=name_map)
         name_map.clear()
 
         index2 = 0
-        while index < len(self.left.data_frame.columns):
-            name_map[index] = self.vars[index + index2]
+        while index < len(self.left.data_frame.columns.values.tolist()):
+            name_map[index] = self.vars[index + index2].get()
             index2 += 1
+        print(name_map)
         self.left.data_frame.rename(index=name_map)
         self.callback(self.left)
         self.destroy()
@@ -1394,6 +1427,9 @@ class RatioWin(RootExpansion):
         self.margin_entry = tk.Entry(master=self.step_2_box)
         self.ratio_exe = tk.Button(master=self.step_2_box, text="Execute", command=self.ratio_margin_command)
 
+        self.step_3_box = tk.LabelFrame(master=self, text="Step 3:")
+        self.regen_spec_button = tk.Button(master=self, text="Regenerate Spectrum", command=self.regen_spec)
+
         self.info_var = tk.StringVar(self)
         self.info = tk.Message(master=self, textvariable=self.info_var, width=150)
 
@@ -1425,7 +1461,7 @@ class RatioWin(RootExpansion):
         else:
             return False
 
-    def ratio_margin_command(self):
+    def ratio_margin(self):
         if self.axis_var.get() != "" and self.ratio_entry.get() != "" and self.margin_entry.get() != "":
             axis = self.axis_var.get()
             margin = self.margin_entry.get()
@@ -1436,5 +1472,64 @@ class RatioWin(RootExpansion):
                                          axis=column, whole_row=False)
                 self.dataset.remove_data(value=["$" + dictionary[column], "<", str(float(ratio) - float(margin))],
                                          axis=column, whole_row=False)
+
+                return dictionary
+
+    def ratio_margin_command(self):
+        self.ratio_margin()
         self.owner.main_pic.update_graph()
         self.destroy()
+
+    def regen_spec(self):
+        mod_list = list(self.ratio_margin().keys())
+        line_width = 0.035
+        data.regen_spec(self.dataset, mod_list, line_width)
+
+
+class SimilarRemoveWindow(RootExpansion):
+    def __init__(self, owner: App, dataset: data.Data):
+        super().__init__()
+
+        # Back Ref
+        self.owner = owner
+        self.dataset = dataset
+
+        # Members
+        self.dataset_message = tk.Message(master=self, text="Dataset to Remove From:", width=150)
+        self.dataset_var = tk.StringVar(self)
+        self.dataset_entry = ttk.Combobox(master=self, textvariable=self.dataset_var, state="readonly")
+        self.threshold_message = tk.Message(master=self, text="Threshold:", width=150)
+        self.threshold_entry = tk.Entry(master=self)
+        self.info_var = tk.StringVar(self)
+        self.info = tk.Message(master=self, textvariable=self.info_var, width=150)
+        self.enter_button = tk.Button(master=self, command=self.enter, text="Enter")
+
+        # Positioning
+        self.dataset_message.grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        self.dataset_entry.grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        self.threshold_message.grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        self.threshold_entry.grid(row=3, column=0, sticky="w", padx=10, pady=5)
+        self.info.grid(row=4, column=0, padx=10, pady=5)
+        self.enter_button.grid(row=5, column=0, padx=10, pady=5)
+
+        # Customization
+        self.data_map = {}
+        for value in self.owner.data_storage.data_list:
+            if value != self.dataset:
+                self.data_map[value.name] = value
+        self.dataset_entry['values'] = list(self.data_map.keys())
+
+        self.update()
+        self.center_root(self.winfo_width(), self.winfo_height())
+
+    def enter(self):
+        if self.dataset_var.get != "" and self.threshold_entry.get() != "":
+            # try:
+            threshold = float(self.threshold_entry.get())
+            data.remove_from(on=self.dataset, values_from=self.data_map[self.dataset_var.get()],
+                             threshold=threshold)
+            # except ValueError:
+            # self.info_var.set("Invalid threshold value")
+            # except IndexError:
+            # self.info_var.set("Dataset to compare cannot have multiple intensity axes")
+            self.destroy()

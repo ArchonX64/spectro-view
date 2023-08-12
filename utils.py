@@ -65,7 +65,7 @@ class FileManager:
     def __init__(self, owner):
         self.owner = owner
 
-        self.allowed_type = ['txt', 'xlsx', 'csv', 'cat', 'ft']
+        self.allowed_type = ['txt', 'xlsx', 'csv', 'cat', 'ft', 'dat', 'fit']
         self.custom_type = []
         self.custom_funcs = {}
 
@@ -96,6 +96,7 @@ class FileManager:
     # The main command for doing files -> datasets. Will vary based on file type
     def gen_dataset(self, name: AnyStr):
         file = self.files[name]
+        inten_name = file.name.split("/")[-1]
         if file.type == 'xlsx':
             messagebox.showwarning("File Type Warning", "Excel files are very slow to process compared to CSV files."
                                                         " this application will create a new CSV file that is a copy"
@@ -104,21 +105,34 @@ class FileManager:
             file.path = file.path.replace('xlsx', 'csv')
             file.path = 'csv'
             gui.CsvApp(callback=self.csv_callback, file=file)
+            return
         elif file.type == 'csv':
             gui.CsvApp(callback=self.csv_callback, file=file)
+            return
         elif file.type == 'cat':
-            loaded = np.loadtxt(fname=file.path, usecols=[0, 2], )
-            dataset = pd.DataFrame(columns=["Frequency (MHz)", "Intensity (V)"])
+            loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
+            print(inten_name)
+            dataset = pd.DataFrame(columns=["Frequency (MHz)", inten_name])
             dataset["Frequency (MHz)"] = loaded[:, 0]
-            dataset["Intensity (V)"] = loaded[:, 1]
-            dataset["Intensity (V)"] = dataset["Intensity (V)"].apply(func=lambda x: math.pow(10, x))
-            self.owner.data_storage.add_data(dataset)
+            dataset[inten_name] = loaded[:, 1]
+            dataset[inten_name] = dataset[inten_name].apply(func=lambda x: math.pow(10, x))
         elif file.type == 'ft':
             dataset = pd.read_csv(filepath_or_buffer=file.path, sep=" ", header=None, dtype='float')
-            dataset.columns = ["Frequency (MHz)", "Intensity (V)"]
-            self.owner.data_storage.add_data(dataset)
+            dataset.columns = ["Frequency (MHz)", inten_name]
+        elif file.type == 'dat':
+            dataset = pd.read_csv(filepath_or_buffer=file.path, sep="\t", header=None, dtype='float')
+            dataset.columns = ["Frequency (MHz)", inten_name]
+        elif file.type == 'fit':
+            dataset = pd.read_csv(filepath_or_buffer=file.path, skiprows=25, sep=" ", header=None, usecols=[7, 7], dtype='float')
+            dataset.columns = ["Frequency (MHz)"]
+            dataset[inten_name] = np.zeros(dataset["Frequency (MHz)"].size)
         elif file.type in self.custom_type:
             self.owner.data_storage.add_data(self.custom_funcs[file.type](file.path))
+            return
+        else:
+            gui.error("Unsupported File Type")
+            return
+        self.owner.data_storage.add_data(name=file.name.split("\\")[-1], data=dataset)
 
     # info is a list [[1,0],[-1,1]], where the lists are the starting/ending rows and -1 indicates that it goes to eof
     def csv_callback(self, root, file: File, is_full: bool, info=None):
@@ -146,7 +160,8 @@ class FileManager:
                 messagebox.showerror("Error", "Rows and columns selected are unable to be read")
                 return
         # Add created dataset to the DataStorage of the main app
-        self.owner.data_storage.add_data(data=dataset)
+        print(file.name.split("/")[-1])
+        self.owner.data_storage.add_data(name=file.name, data=dataset)
 
     def new_association(self, file_type, func):
         self.custom_type.append(file_type)
