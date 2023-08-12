@@ -5,8 +5,6 @@ import tkinter.ttk as ttk
 from typing import Union, AnyStr, Callable
 from tkinter import filedialog, messagebox
 
-import winsound
-
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg, NavigationToolbar2Tk
 )
@@ -15,10 +13,6 @@ import importlib.util
 import data
 import graph as gph
 import utils
-
-
-def win_warning():
-    winsound.PlaySound("Asterisk", winsound.SND_ALIAS)
 
 
 def error(message: Union[AnyStr, int]):
