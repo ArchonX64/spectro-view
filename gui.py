@@ -277,7 +277,7 @@ class Sidebar(tk.Frame):
     # Reuse the DataInfoSelector window to modify basic attributes
     def set_info(self):
         if self.pressed_dataset is not None:
-            self.pressed_dataset.dataset.update_info()
+            DataSettingsUpdater(self.get_pressed())
 
     # Window to modify the actual data of the dataframe
     def modify_data(self):
@@ -293,7 +293,7 @@ class Sidebar(tk.Frame):
 
 # Includes ways to modify the dataset/graph
 class Header(tk.Frame):
-    header_color = "#C9D2CD"
+    header_color = "#e6e7e8"
 
     def __init__(self, root):
         super().__init__(master=root)
@@ -304,32 +304,32 @@ class Header(tk.Frame):
         # Customization
         self.config(bg=self.header_color)
         self.grid_propagate(False)
+        self.button_style = ButtonStyle(self)
 
         # Members
         self.graphing_message = tk.Message(master=self, text="Graphing:", width=100, bg=self.header_color)
-        self.graph_button = tk.Button(master=self, text="Graph", command=self.graph_selected)
+        self.graph_button = ttk.Button(master=self, text="Graph", command=self.graph_selected)
+        self.graph_type_button = ttk.Button(master=self, text="Graph Types", command=self.graph_types)
+        self.zoom_button = ttk.Button(master=self, text="Zoom", command=self.zoom)
+        self.threed_graph_button = ttk.Button(master=self, text="Graph 3D", command=self.threed_graph)
 
-        self.graph_type_button = tk.Button(master=self, text="Graph Types", command=self.graph_types)
-
-        self.zoom_button = tk.Button(master=self, text="Zoom", command=self.zoom)
-        self.threed_graph_button = tk.Button(master=self, text="Graph 3D", command=self.threed_graph)
         self.data_manip_text = tk.Message(master=self, text="Data Manipulation", width=150, bg=self.header_color)
-        self.peak_pick_button = tk.Button(master=self, command=self.peak_pick, text="Peak Pick")
-        self.script_button = tk.Button(master=self, command=self.cus_script, text="Custom Script")
-        self.ratio_sep_button = tk.Button(master=self, command=self.ratio_sep, text="Ratio Separate")
-        self.filter_known_button = tk.Button(master=self, command=self.filter_known, text="Filter Known")
+        self.peak_pick_button = ttk.Button(master=self, command=self.peak_pick, text="Peak Pick")
+        self.script_button = ttk.Button(master=self, command=self.cus_script, text="Custom Script")
+        self.ratio_sep_button = ttk.Button(master=self, command=self.ratio_sep, text="Ratio Separate")
+        self.filter_known_button = ttk.Button(master=self, command=self.filter_known, text="Filter Known")
 
         # Positioning
         self.graphing_message.grid(row=0, column=0, sticky='w')
-        self.graph_button.grid(row=1, column=0, padx=10, pady=5, sticky='w')
-        self.graph_type_button.grid(row=1, column=1, pady=5, sticky='w')
-        self.zoom_button.grid(row=2, column=0, padx=10, pady=10, sticky='w')
-        self.threed_graph_button.grid(row=2, column=1, padx=10, pady=10, sticky='w')
+        self.graph_button.grid(row=1, column=0, padx=10, pady=5, sticky='w', ipady=5)
+        self.graph_type_button.grid(row=1, column=1, padx=10, pady=5, sticky='w', ipady=5)
+        self.zoom_button.grid(row=2, column=0, padx=10, pady=10, sticky='w', ipady=5)
+        self.threed_graph_button.grid(row=2, column=1, padx=10, pady=10, sticky='w', ipady=5)
         self.data_manip_text.grid(row=0, column=2, columnspan=2, sticky='w')
-        self.peak_pick_button.grid(row=1, column=2, padx=10, pady=5, sticky='w')
-        self.script_button.grid(row=2, column=2, padx=10, pady=10, sticky='w')
-        self.ratio_sep_button.grid(row=1, column=3, padx=10, pady=10, sticky='w')
-        self.filter_known_button.grid(row=2, column=3, padx=10, pady=10, sticky='w')
+        self.peak_pick_button.grid(row=1, column=2, padx=10, pady=5, sticky='w', ipady=5)
+        self.script_button.grid(row=2, column=2, padx=10, pady=10, sticky='w', ipady=5)
+        self.ratio_sep_button.grid(row=1, column=3, padx=10, pady=10, sticky='w', ipady=5)
+        self.filter_known_button.grid(row=2, column=3, padx=10, pady=10, sticky='w', ipady=5)
 
         self.grid_propagate(True)
 
@@ -964,10 +964,10 @@ class ExportDataWin(RootExpansion):
 
         # Customization
         self.wm_title("Export")
-        self.app_width = self.percent_width(17)
-        self.app_height = self.percent_height(25)
-        self.center_root(self.app_width, self.app_height)
         self.type_entry['values'] = ['CSV', 'Text File']
+
+        self.update()
+        self.center_root(self.winfo_width(), self.winfo_height())
 
     def browse_location(self):
         dir_path = tk.filedialog.askdirectory()
@@ -1060,7 +1060,7 @@ class MergeWindow(RootExpansion):
         self.to_merge_box = ttk.Combobox(master=self, state="readonly")
         self.combine_var = tk.IntVar(master=self, value=0)
         self.combine_val_box = ttk.Checkbutton(master=self, variable=self.combine_var, text="Combine")
-        self.threshold_message = tk.Message(master=self, text="Threshold (KHz):", width=150)
+        self.threshold_message = tk.Message(master=self, text="Threshold (kHz):", width=150)
         self.threshold_var = tk.StringVar(master=self, value="10")
         self.threshold_box = tk.Entry(master=self, textvariable=self.threshold_var)
         self.enter_button = tk.Button(master=self, command=self.enter, text="Enter")
@@ -1492,7 +1492,7 @@ class SimilarRemoveWindow(RootExpansion):
         self.dataset_message = tk.Message(master=self, text="Dataset to Remove From:", width=150)
         self.dataset_var = tk.StringVar(self)
         self.dataset_entry = ttk.Combobox(master=self, textvariable=self.dataset_var, state="readonly")
-        self.threshold_message = tk.Message(master=self, text="Threshold:", width=150)
+        self.threshold_message = tk.Message(master=self, text="Threshold (kHz):", width=150)
         self.threshold_entry = tk.Entry(master=self)
         self.info_var = tk.StringVar(self)
         self.info = tk.Message(master=self, textvariable=self.info_var, width=150)
@@ -1527,3 +1527,56 @@ class SimilarRemoveWindow(RootExpansion):
             # except IndexError:
             # self.info_var.set("Dataset to compare cannot have multiple intensity axes")
             self.destroy()
+
+
+class DataSettingsUpdater(RootExpansion):
+    def __init__(self, dataset: data.Data):
+        super().__init__()
+
+        # Back ref
+        self.dataset = dataset
+
+        # Members
+        self.name_message = tk.Message(master=self, text="Name:", width=150)
+        self.name_var = tk.StringVar(self, value=self.dataset.name)
+        self.name_entry = ttk.Entry(master=self, textvariable=self.name_var)
+
+        self.freqax_message = tk.Message(master=self, text="Frequency Axis:", width=150)
+        self.freqax_var = tk.StringVar(self, value=self.dataset.freq_ax)
+        self.freqax_entry = ttk.Combobox(master=self, values=self.dataset.data_frame.columns.values.tolist(),
+                                         state="readonly", textvariable=self.freqax_var)
+
+        self.ax_message = tk.Message(master=self, text="X-Axis:", width=150)
+        self.ax_var = tk.StringVar(self, value=self.dataset.ax)
+        self.ax_entry = ttk.Combobox(master=self, values=self.dataset.data_frame.columns.values.tolist(),
+                                     state="readonly", textvariable=self.ax_var)
+
+        self.enter_button = ttk.Button(master=self, command=self.enter, text="Enter")
+
+        # Positioning
+        self.name_message.grid(row=0, column=0, padx=10, pady=5)
+        self.name_entry.grid(row=1, column=0, padx=10, pady=5)
+        self.freqax_message.grid(row=2, column=0, padx=10, pady=5)
+        self.freqax_entry.grid(row=3, column=0, padx=10, pady=5)
+        self.ax_message.grid(row=4, column=0, padx=10, pady=5)
+        self.ax_entry.grid(row=5, column=0, padx=10, pady=5)
+        self.enter_button.grid(row=6, column=0, padx=10, pady=20)
+
+        # Customization
+        self.update()
+        self.center_root(self.winfo_width(), self.winfo_height())
+
+    def enter(self):
+        if self.name_var.get() != "" and self.freqax_var.get() != "" and self.ax_var.get() != "":
+            self.dataset.name = self.name_var.get()
+            self.dataset.freq_ax = self.freqax_var.get()
+            self.dataset.ax = self.ax_var.get()
+            self.dataset.owner.sidebar.update_data()
+            self.destroy()
+
+
+class ButtonStyle(ttk.Style):
+    def __init__(self, master):
+        super().__init__(master)
+
+        self.configure(style="Bargle.TButton", background="white")

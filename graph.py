@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import matplotlib
 import matplotlib.pyplot as plt
 
 import data
 
 import typing
 from typing import Union, AnyStr, Callable
+
+matplotlib.use("TkAgg")
 
 Number = Union[float, int]
 

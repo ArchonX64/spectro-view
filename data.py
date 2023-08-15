@@ -17,7 +17,7 @@ from typing import Callable, AnyStr, Union, Any
 # Looks messy cause python doesn't allow overloaded constructors >:(
 class Data:
     def __init__(self, data_frame: pd.DataFrame, owner: gui.App, name: AnyStr, freq_ax: AnyStr = None,
-                 gtypes: list[AnyStr] = None, no_plot: list[AnyStr] = None):
+                 gtypes: list[AnyStr] = None):
         assert isinstance(data_frame, pd.DataFrame)
         if freq_ax is None:
             self.data_frame = data_frame
@@ -38,10 +38,6 @@ class Data:
             self.dup_num = 1
             self.graph = gph.Graph(self)
             self.data_frame.sort_values(by=self.freq_ax, inplace=True)
-        if no_plot is None:
-            self.no_plot = []
-        else:
-            self.no_plot = no_plot
 
     def gen_info(self):
         gui.DataInfoSelector(name=self.name, data_columns=self.data_frame.columns, callback=self.fin_setup, is_gen=True)
@@ -146,39 +142,40 @@ class Data:
         if len(data_list) > 0:
             gui.MergeWindow(self.merge_callback, data_list)
 
-    def merge_callback(self, to_merge: Data, combine: bool, threshold: int):
-        merge_data = None
+    def merge_callback(self, to_merge: str, combine: bool, threshold: int):
         for data in self.owner.sidebar.dataset_texts:
             if data.dataset.name == to_merge:
-                merge_data = data.dataset
+                to_merge = data.dataset
                 break
-        for column in merge_data.data_frame.columns:
-            if column in self.data_frame.columns and column != merge_data.freq_ax:
-                dup_num = 1
-                while column + str(dup_num) in self.data_frame.columns:
-                    dup_num += 1
-                merge_data.data_frame.rename(columns={column: column + str(dup_num)}, inplace=True)
-                merge_data.graph.column_gtypes[column + str(dup_num)] = merge_data.graph.column_gtypes[column]
-                merge_data.graph.column_gtypes.pop(column)
-                self.dup_num += 1
-                # gui.MergeConflictWindow(right=self, left=merge_data, callback=self.merge_resolution)
-                # return
-        # Using 'right_on' and 'left_on' produced unexpected results
-        merge_data.data_frame.rename(columns={merge_data.freq_ax: self.freq_ax}, inplace=True)
-        self.data_frame = pd.merge(left=self.data_frame, right=merge_data.data_frame, on=self.freq_ax, how='outer')
-        self.data_frame.sort_values(by=self.freq_ax, inplace=True)
-        merge_data.graph.column_gtypes.pop(merge_data.freq_ax)
-        new_gtypes = dict(self.graph.column_gtypes, **merge_data.graph.column_gtypes)
-        self.graph.column_gtypes = new_gtypes
-        self.owner.data_storage.remove_data(merge_data)
+        merged = pd.merge(left=self.data_frame, right=to_merge.data_frame,
+                          left_on=self.freq_ax, right_on=to_merge.freq_ax,
+                          how="outer")
+        new_gtypes = self.graph.column_gtypes.copy()
+        for gtype in to_merge.graph.column_gtypes:
+            if gtype in new_gtypes:
+                new_gtypes[gtype + "*"] = to_merge.graph.column_gtypes[gtype]
+            else:
+                new_gtypes[gtype] = to_merge.graph.column_gtypes[gtype]
+
+        already_found = []
+        to_rename = {}
+        for column in merged:
+            if column in already_found:
+                to_rename[column] = column + "*"
+            else:
+                already_found.append(column)
+        merged.rename(mapper=to_rename)
+        merged_data = Data(data_frame=merged, owner=self.owner, name=self.name + " + " + to_merge.name,
+                           freq_ax=self.freq_ax, gtypes=new_gtypes)
+        self.owner.data_storage.add_data(name=merged_data.name, data=merged_data, gtypes=new_gtypes)
 
         if combine:
             # For this section, we assume that frequencies are close enough together that intensities between
             # them will be relatively the same.
             to_drop = []
             threshold = threshold / 1000.0  # KHz -> MHz
-            self.data_frame.reset_index(drop=True, inplace=True)
-            freq_array = self.data_frame[self.freq_ax].to_numpy()
+            merged_data.data_frame.reset_index(drop=True, inplace=True)
+            freq_array = merged_data.data_frame[merged_data.freq_ax].to_numpy()
 
             # How this works:
             # Each index (A) will check 1 in front of itself (B) if there is a value within (threshold) KHz. If it is true,
@@ -193,18 +190,18 @@ class Data:
                     index += 1  # Have index simulate the value above
                     condition = True  # Why doesn't python have do-while loops??
                     while condition:
-                        for column in self.data_frame.columns:
-                            if column != self.freq_ax:  # Only for intensities
-                                if not pd.isna(self.data_frame[column][index]):  # Make sure that NaN values don't overwrite data
-                                    print(self.data_frame[column][index])
-                                    self.data_frame[column][rel_index] = self.data_frame[column][index]  # Rewrite current value to previous value
+                        for column in merged_data.data_frame.columns:
+                            if column != merged_data.freq_ax:  # Only for intensities
+                                if not pd.isna(merged_data.data_frame[column][index]):  # Make sure that NaN values don't overwrite data
+                                    print(merged_data.data_frame[column][index])
+                                    merged_data.data_frame[column][rel_index] = merged_data.data_frame[column][index]  # Rewrite current value to previous value
                         to_drop.append(index)
                         index += 1
                         try:  # In case there is matches at the end of the data, we don't want it to check outside the index.
                             condition = (abs(freq_array[index] - freq_array[rel_index]) < threshold)
                         except IndexError:
                             condition = False
-            self.data_frame.drop(index=to_drop, inplace=True)
+            merged_data.data_frame.drop(index=to_drop, inplace=True)
 
     def merge_resolution(self, merge_data: Data):
         merge_data.data_frame.rename(columns={merge_data.freq_ax: self.freq_ax}, inplace=True)
@@ -324,6 +321,7 @@ def regen_spec(dataset: Data, mod_list: list, line_width: Union[float, int]):
 
 def remove_from(on: Data, values_from: Data, threshold: Union[int, float]):
     on.data_frame.reset_index(drop=True, inplace=True)
+    threshold = threshold / 1000.0
     # Check to make sure that dataset is a true frequency spectrum
     if len(values_from.data_frame.columns) > 2:
         raise IndexError
@@ -344,8 +342,6 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float]):
                 to_drop[index] = on_index
                 index += 1
                 break
-                # if value1 > value + threshold:
-                #     break
         on_index += 1
     on.owner.data_storage.add_data(name=on.name + " (fitted)", data=on.data_frame.loc[0:(index - 1)])
     on.data_frame.drop(axis=0, labels=to_drop[0:(index - 1)], inplace=True)
