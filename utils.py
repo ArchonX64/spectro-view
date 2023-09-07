@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os.path
 import typing
 from typing import AnyStr
@@ -9,7 +11,7 @@ from xlsx2csv import Xlsx2csv
 import sys
 
 import gui
-import graph as gp
+import data
 
 import math
 
@@ -37,12 +39,12 @@ class NonPositiveIntegerException(Exception):
 def export_file(name: AnyStr, location: AnyStr, dataset: pd.DataFrame, file_type):
     if file_type == "CSV":
         with open(location + "/" + name + ".csv", "wb") as csvfile:
-            dataset.to_csv(path_or_buf=csvfile)
+            dataset.to_csv(path_or_buf=csvfile, index=False)
         csvfile.close()
 
 
-def export_graph(name: AnyStr, location: AnyStr, graph: gp.Graph):
-    graph = graph.create_graph()
+def export_graph(name: AnyStr, location: AnyStr, data: data.Data):
+    graph = data.graph.create_graph()
     graph.savefig(fname=location + "/" + name + ".png", dpi='figure')
 
 
@@ -111,7 +113,6 @@ class FileManager:
             return
         elif file.type == 'cat':
             loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
-            print(inten_name)
             dataset = pd.DataFrame(columns=["Frequency (MHz)", inten_name])
             dataset["Frequency (MHz)"] = loaded[:, 0]
             dataset[inten_name] = loaded[:, 1]
@@ -160,7 +161,6 @@ class FileManager:
                 messagebox.showerror("Error", "Rows and columns selected are unable to be read")
                 return
         # Add created dataset to the DataStorage of the main app
-        print(file.name.split("/")[-1])
         self.owner.data_storage.add_data(name=file.name, data=dataset)
 
     def new_association(self, file_type, func):

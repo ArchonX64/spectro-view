@@ -1,22 +1,28 @@
 from __future__ import annotations
 
-import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import use as plt_use
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 import data
 
-import typing
-from typing import Union, AnyStr, Callable
+from typing import Union, AnyStr
 
-matplotlib.use("TkAgg")
+plt_use("TkAgg")
 
 Number = Union[float, int]
 
+LINE = 0
+SCATTER = 1
+STEM = 2
+NONE = 3
+
 
 class GraphCanvas:
-    def __init__(self):
+    def __init__(self, owner):
         # Back ref
         self.canvas = None
+        self.owner = owner
 
         # Members
         self.figure = plt.Figure(figsize=(12, 5.5), layout='constrained')
@@ -28,11 +34,24 @@ class GraphCanvas:
     def set_canvas(self, canvas):
         self.canvas = canvas
 
-    def graph(self):
-        if self.curr_graph is not None:
-            self.figure.clear()
-            self.curr_graph.plot(plot=self.figure.add_subplot())
-            self.canvas.draw()
+    def graph(self, graph: Graph):
+        # if self.curr_graph is not None:
+            # self.figure.clear()
+            # self.curr_graph.plot(plot=self.figure.add_subplot())
+            # self.canvas.draw()
+        self.figure.clear()
+        curr_plot = self.figure.add_subplot()
+
+        color_index = 0
+        for plot in graph.plots:
+            if plot.type == LINE:
+                curr_plot.plot(graph.dataset.data_frame[plot.x], graph.dataset.data_frame[plot.y],
+                               label=plot.y, color="C" + str(color_index))
+            if plot.type == SCATTER:
+                curr_plot.scatter(graph.dataset.data_frame[plot.x], graph.dataset.data_frame[plot.y],
+                                  label=plot.y, color="C" + str(color_index))
+
+
 
     def threed_graph(self, x, y, z, gtype: AnyStr):
         if self.curr_graph is not None:

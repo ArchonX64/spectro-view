@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 
@@ -19,23 +21,18 @@ class Data:
     def __init__(self, data_frame: pd.DataFrame, owner: gui.App, name: AnyStr, freq_ax: AnyStr = None,
                  gtypes: list[AnyStr] = None):
         assert isinstance(data_frame, pd.DataFrame)
+        self.data_frame = data_frame
+        self.owner = owner
+        self.name = name
+        self.temp_gtypes = gtypes
+        self.dup_num = 1
         if freq_ax is None:
-            self.data_frame = data_frame
-            self.owner = owner
-            self.name = name
             self.ax = None
             self.freq_ax = None
-            self.temp_gtypes = gtypes
-            self.dup_num = 1
             self.gen_info()
         elif freq_ax is not None:
-            self.data_frame = data_frame
-            self.owner = owner
-            self.name = name
             self.freq_ax = freq_ax
             self.ax = freq_ax
-            self.temp_gtypes = gtypes
-            self.dup_num = 1
             self.graph = gph.Graph(self)
             self.data_frame.sort_values(by=self.freq_ax, inplace=True)
 
@@ -49,12 +46,16 @@ class Data:
         self.data_frame[name] = series
         self.graph.column_gtypes[name] = "Line"
 
+    def similar_copy(self, data_frame: pd.DataFrame, name: str) -> Data:
+        return Data(name=name, data_frame=data_frame, freq_ax=self.freq_ax, gtypes=self.graph.column_gtypes,
+                    owner=self.owner)
+
     def fin_setup(self, name: AnyStr, ax: AnyStr, is_gen: bool):
         self.name = name
         self.ax = ax
         if is_gen:
             self.freq_ax = ax
-            self.owner.data_storage.add_data(name, self)
+            self.owner.data_storage.add_data(data=self, name=name)
             self.graph = gph.Graph(self, self.temp_gtypes)
         self.data_frame.sort_values(by=self.freq_ax, inplace=True)
 
@@ -129,10 +130,10 @@ class Data:
     # - Output a new DataFrame
     # - Have arguments for the target DataFrame, the x-axis, and target column
     def extern_modify(self, func: Callable, col):
-        self.owner.data_storage.add_data(self.name + " (mod)", func(df=self.data_frame, x=self.ax, col=col))
+        self.owner.data_storage.add_data(name=self.name + " (mod)", data=func(df=self.data_frame, x=self.ax, col=col))
 
     def replicate(self):
-        self.owner.data_storage.add_data("*" + self.name, self.data_frame.copy(deep=True), gtypes=self.graph.column_gtypes)
+        self.owner.data_storage.add_data(name="*" + self.name, data=self.data_frame.copy(deep=True), gtypes=self.graph.column_gtypes)
 
     def merge(self):
         data_list = []
@@ -193,7 +194,6 @@ class Data:
                         for column in merged_data.data_frame.columns:
                             if column != merged_data.freq_ax:  # Only for intensities
                                 if not pd.isna(merged_data.data_frame[column][index]):  # Make sure that NaN values don't overwrite data
-                                    print(merged_data.data_frame[column][index])
                                     merged_data.data_frame[column][rel_index] = merged_data.data_frame[column][index]  # Rewrite current value to previous value
                         to_drop.append(index)
                         index += 1
@@ -230,7 +230,7 @@ class Data:
             self.graph.column_gtypes.pop(value)
         for value in inverse_remove:
             inverse_gtypes.pop(value)
-        self.owner.data_storage.add_data(self.name + "(split)", new_dat, inverse_gtypes)
+        self.owner.data_storage.add_data(name=self.name + "(split)", data=new_dat, gtypes=inverse_gtypes)
 
 
 # Where all the opened datasets are held
@@ -241,9 +241,19 @@ class DataStorage:
         self.data_list = []
         self.temp_storage = None  # Temporary storage so that the dataset isn't garbage collected accidentally
 
-    def add_data(self, name: AnyStr, data: Union[Data, pd.DataFrame], gtypes: list[AnyStr] = None):
-        if isinstance(data,
-                      pd.DataFrame):  # If a DataFrame is added, it is passed to a Data constructor to be properly wrapped
+        '''try:
+            var_file = open(file=utils.resource_path("pref.svd"), mode="r")
+            self.peak_min = float(var_file.readline())
+            self.peak_max = float(var_file.readline())
+        except FileNotFoundError:
+            pass
+            
+        except ValueError:
+            gui.error("The preference file in " + utils.resource_path("pref.svd") + " is corrupted or incorrect.\n"
+                                                                                    "A new file will be created.")'''
+
+    def add_data(self, data: Union[Data, pd.DataFrame], name: AnyStr = None, gtypes: list[AnyStr] = None):
+        if isinstance(data, pd.DataFrame) and name is not None:  # If a DataFrame is added, it is passed to a Data constructor to be properly wrapped
             self.temp_storage = Data(name=name, data_frame=data, owner=self.root, gtypes=gtypes)
             return
         elif isinstance(data, Data):
@@ -319,7 +329,7 @@ def regen_spec(dataset: Data, mod_list: list, line_width: Union[float, int]):
         transfreq = df[dataset.freq_ax][index]
 
 
-def remove_from(on: Data, values_from: Data, threshold: Union[int, float]):
+def remove_from(on: Data, values_from: Data, threshold: Union[int, float], return_removed: bool, add_back: bool):
     on.data_frame.reset_index(drop=True, inplace=True)
     threshold = threshold / 1000.0
     # Check to make sure that dataset is a true frequency spectrum
@@ -343,6 +353,22 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float]):
                 index += 1
                 break
         on_index += 1
-    on.owner.data_storage.add_data(name=on.name + " (fitted)", data=on.data_frame.loc[0:(index - 1)])
-    on.data_frame.drop(axis=0, labels=to_drop[0:(index - 1)], inplace=True)
+    removed = on.similar_copy(data_frame=on.data_frame.loc[to_drop[0:index]], name=on.name + " (removed)")
+    new_on = on.similar_copy(data_frame=on.data_frame.drop(axis=0, labels=to_drop[0:index]),
+                             name=on.name + " - " + values_from.name)
+    on.owner.data_storage.add_data(new_on)
+    if add_back:
+        def renamer(name):
+            if name != removed.freq_ax:
+                return name + " (" + values_from.name + ")"
+            else:
+                return name
+        to_back = removed.data_frame.rename(mapper=renamer, axis=1)
+        print(to_back)
+        on.data_frame = pd.merge(left=on.data_frame, right=to_back, left_on=on.freq_ax, right_on=removed.freq_ax, how="outer")
+        for column in to_back.columns:
+            on.graph.column_gtypes[column] = "Line"
+    if return_removed:
+        on.owner.data_storage.add_data(removed)
+
 
