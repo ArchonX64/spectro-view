@@ -34,23 +34,11 @@ class GraphCanvas:
     def set_canvas(self, canvas):
         self.canvas = canvas
 
-    def graph(self, graph: Graph):
-        # if self.curr_graph is not None:
-            # self.figure.clear()
-            # self.curr_graph.plot(plot=self.figure.add_subplot())
-            # self.canvas.draw()
-        self.figure.clear()
-        curr_plot = self.figure.add_subplot()
-
-        color_index = 0
-        for plot in graph.plots:
-            if plot.type == LINE:
-                curr_plot.plot(graph.dataset.data_frame[plot.x], graph.dataset.data_frame[plot.y],
-                               label=plot.y, color="C" + str(color_index))
-            if plot.type == SCATTER:
-                curr_plot.scatter(graph.dataset.data_frame[plot.x], graph.dataset.data_frame[plot.y],
-                                  label=plot.y, color="C" + str(color_index))
-
+    def graph(self):
+        if self.curr_graph is not None:
+            self.figure.clear()
+            self.curr_graph.plot(plot=self.figure.add_subplot())
+            self.canvas.draw()
 
 
     def threed_graph(self, x, y, z, gtype: AnyStr):
