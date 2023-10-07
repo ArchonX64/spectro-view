@@ -13,3 +13,5 @@ Using PyInstaller to Create An Executable:
 
 This project is still in a very early stage, and the primary focus is making sure that this application is usable and useful.
 Refinements will be the next big step!
+
+Special thanks to Rebecca Peebles to providing peaky.py, a program that provides peak fitting functions.
