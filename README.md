@@ -1,6 +1,8 @@
 # spectro-view
 A flexible application for analyzing spectroscopic data, specifically for microwave spectroscopy. Allows a number of input files and ways to modify and find patterns in data!
 
+Documentation: [SpectroView User GUide](https://docs.google.com/document/d/1115FLJRKV3av07rBjWV4WWhspwziUJL0CXjLDepaTSg/edit?usp=sharing)
+
 Supported Files: .csv, .cat, .ft, .txt, custom file types (WIP)
 
 Required Dependencies:
