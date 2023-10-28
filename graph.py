@@ -17,6 +17,9 @@ SCATTER = 1
 STEM = 2
 NONE = 3
 
+gtype_from_val = {LINE: "Line", SCATTER: "Scatter", STEM: "Stem", NONE: "None"}
+gtype_from_string = {"Line": LINE, "Stem": STEM, "Scatter": SCATTER, "None": NONE}
+
 
 class GraphCanvas:
     def __init__(self, owner):
@@ -40,7 +43,6 @@ class GraphCanvas:
             self.curr_graph.plot(plot=self.figure.add_subplot())
             self.canvas.draw()
 
-
     def threed_graph(self, x, y, z, gtype: AnyStr):
         if self.curr_graph is not None:
             self.figure.clear()
@@ -58,7 +60,7 @@ class Graph:
         if gtypes is None:
             self.column_gtypes = {}
             for column in dataset.data_frame.columns:
-                self.column_gtypes[column] = "Line"
+                self.column_gtypes[column] = LINE
         else:
             self.column_gtypes = gtypes
         self.xmin, self.xmax, self.ymin, self.ymax = None, None, None, None
@@ -67,15 +69,15 @@ class Graph:
         index = 0
         for column in self.dataset.data_frame.columns:
             if column != self.dataset.freq_ax and column != self.dataset.ax:
-                if self.column_gtypes[column] == "None":
+                if self.column_gtypes[column] == NONE:
                     continue
-                if self.column_gtypes[column] == "Line":
+                if self.column_gtypes[column] == LINE:
                     plot.plot(self.dataset.data_frame[self.dataset.ax],
                               self.dataset.data_frame[column], label=column, color="C" + str(index))
-                elif self.column_gtypes[column] == "Scatter":
+                elif self.column_gtypes[column] == SCATTER:
                     plot.scatter(self.dataset.data_frame[self.dataset.ax],
                                  self.dataset.data_frame[column], label=column, c="C" + str(index))
-                elif self.column_gtypes[column] == "Stem":
+                elif self.column_gtypes[column] == STEM:
                     plot.stem(self.dataset.data_frame[self.dataset.ax],
                               self.dataset.data_frame[column], label=column, linefmt="C" + str(index),
                               markerfmt="None")
@@ -96,9 +98,9 @@ class Graph:
         return plot
 
     def plot_3d(self, plot: plt.Subplot, x, y, z, graph_type: AnyStr):
-        if graph_type == "Line":
+        if graph_type == LINE:
             plot.plot(self.dataset.data_frame[x], self.dataset.data_frame[y], self.dataset.data_frame[z])
-        if graph_type == "Scatter":
+        if graph_type == SCATTER:
             plot.scatter(self.dataset.data_frame[x], self.dataset.data_frame[y], self.dataset.data_frame[z])
         plot.set_xlabel(x)
         plot.set_ylabel(y)
@@ -122,7 +124,8 @@ class Graph:
         plot.set_xlim(left=self.xmin, right=self.xmax)
         plot.set_ylim(bottom=self.ymin, top=self.ymax)
 
-    def set_scale(self, xmin: Number = None, xmax: Number = None, ymin: Number = None, ymax: Number = None, auto: bool = False):
+    def set_scale(self, xmin: Number = None, xmax: Number = None, ymin: Number = None, ymax: Number = None,
+                  auto: bool = False):
         if auto:
             self.is_auto = True
             return

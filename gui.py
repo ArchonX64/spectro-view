@@ -1,16 +1,20 @@
 import re
 import sys
+
+if "win32" in sys.platform:
+    from win32api import GetMonitorInfo, MonitorFromPoint
 import tkinter as tk
 import tkinter.ttk as ttk
 from typing import Union, AnyStr, Callable
 from tkinter import filedialog, messagebox
 
+import pandas as pd
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg, NavigationToolbar2Tk
 )
 
-import importlib.util
 import data
+import graph
 import graph as gph
 import utils
 
@@ -21,6 +25,14 @@ def error(message: Union[AnyStr, int]):
 
 # A basic extension of Tk root class to incorporate some useful functions
 class RootExpansion(tk.Tk):
+    if "win" in sys.platform:  # Code to obtain taskbar height on windows
+        monitor_info = GetMonitorInfo(MonitorFromPoint((0, 0)))
+        work_area = monitor_info.get("Work")
+        monitor_area = monitor_info.get("Monitor")
+        TASKBAR_HEIGHT = monitor_area[3] - work_area[3]
+    else:
+        TASKBAR_HEIGHT = 40  # Very generalized taskbar height estimate if it can't be found
+
     def __init__(self):
         super().__init__()
         self.screen_width = float(self.winfo_screenwidth())
@@ -33,7 +45,7 @@ class RootExpansion(tk.Tk):
     def center_root(self, width: Union[int, float], height: Union[int, float]):
         self.update_idletasks()
         centered_x = (float(self.winfo_screenwidth()) - width) / 2
-        centered_y = (float(self.winfo_screenheight()) - height) / 2 - 44
+        centered_y = (float(self.winfo_screenheight()) - height) / 2 - self.TASKBAR_HEIGHT
 
         self.geometry("%dx%d+%d+%d" % (width, height, centered_x, centered_y))
 
@@ -85,7 +97,11 @@ class App(RootExpansion):
 
     # Called when "Open" is clicked, starts the sequence of opening a file and turning it into pandas DataFrame
     def import_file_command(self):
-        self.file_manager.add_and_gen(path=tk.filedialog.askopenfilename())
+        try:
+            self.file_manager.add_and_gen(path=tk.filedialog.askopenfilename())
+        except ValueError:
+            error("This file is not in an acceptable format!\n"
+                  "Please consult the user guide for accepted file formats")
 
     def export_dataset(self):
         ExportDataWin(dataset=self.sidebar.get_pressed())
@@ -93,6 +109,7 @@ class App(RootExpansion):
     def export_graph(self):
         ExportGraphWin(graph=self.sidebar.get_pressed())
 
+    # Handles keyboard shortcuts
     def typed(self, event):
         if self.main_pic.is_graphed:
             gr = self.sidebar.get_pressed().graph
@@ -134,7 +151,7 @@ class Menubar(tk.Menu):
     def __init__(self, root):
         super().__init__(root)
 
-        # Add back-references
+        # Back ref
         self.root = root
 
         # Add members
@@ -148,14 +165,12 @@ class Menubar(tk.Menu):
         self.init_editbar()
         self.init_viewbar()
 
-    # Additional customization
+    # Setting up menu bars
     def init_filebar(self):
         self.filebar.add_command(label="Open", command=self.root.import_file_command)
         self.filebar.add_separator()
         self.filebar.add_command(label="Export Dataset", command=self.root.export_dataset)
         self.filebar.add_command(label="Export Graph", command=self.root.export_graph)
-        self.filebar.add_separator()
-        self.filebar.add_command(label="New File Association", command=lambda: FileAssociation(self.root.file_manager))
         self.filebar.add_separator()
         self.filebar.add_command(label="Exit", command=self.root.destroy)
 
@@ -235,7 +250,7 @@ class Sidebar(tk.Frame):
         # When pressed, buttons will add their dataset to an 'active' list and remove it if pressed again
         def pressed(self):
             if not self.is_pressed:
-                self.config(bg="#676767")
+                self["bg"] = "#676767"
                 self.sidebar.pressed_dataset = self
                 self.is_pressed = True
                 for dataset in self.sidebar.dataset_texts:
@@ -243,7 +258,7 @@ class Sidebar(tk.Frame):
                         dataset.config(bg=self.button_color)
                 self.sidebar.root.menubar.enabled_on_data_press(True)
             elif self.pressed:
-                self.config(bg=self.button_color)
+                self["bg"] = self.button_color
                 self.sidebar.pressed_dataset = None
                 self.is_pressed = False
                 self.sidebar.root.menubar.enabled_on_data_press(False)
@@ -273,7 +288,6 @@ class Sidebar(tk.Frame):
             self.dataset_texts.append(data_button)
             data_button.pack(fill=tk.X, side=tk.TOP)
 
-    # Reuse the DataInfoSelector window to modify basic attributes
     def set_info(self):
         if self.pressed_dataset is not None:
             DataSettingsUpdater(self.get_pressed())
@@ -313,7 +327,6 @@ class Header(tk.Frame):
 
         self.data_manip_text = tk.Message(master=self, text="Data Manipulation", width=150, bg=self.header_color)
         self.peak_pick_button = ttk.Button(master=self, command=self.peak_pick, text="Peak Pick")
-        self.script_button = ttk.Button(master=self, command=self.cus_script, text="Custom Script")
         self.ratio_sep_button = ttk.Button(master=self, command=self.ratio_sep, text="Ratio Separate")
         self.filter_known_button = ttk.Button(master=self, command=self.filter_known, text="Filter Known")
 
@@ -325,9 +338,8 @@ class Header(tk.Frame):
         self.threed_graph_button.grid(row=2, column=1, padx=10, pady=10, sticky='w', ipady=5)
         self.data_manip_text.grid(row=0, column=2, columnspan=2, sticky='w')
         self.peak_pick_button.grid(row=1, column=2, padx=10, pady=5, sticky='w', ipady=5)
-        self.script_button.grid(row=2, column=2, padx=10, pady=10, sticky='w', ipady=5)
         self.ratio_sep_button.grid(row=1, column=3, padx=10, pady=10, sticky='w', ipady=5)
-        self.filter_known_button.grid(row=2, column=3, padx=10, pady=10, sticky='w', ipady=5)
+        self.filter_known_button.grid(row=2, column=2, padx=10, pady=10, sticky='w', ipady=5)
 
         self.grid_propagate(True)
 
@@ -369,11 +381,7 @@ class Header(tk.Frame):
     def peak_pick_callback(self, created_window, new_name, res, min_inten, max_inten):
         created_window.destroy()
         new_data = data.peak_pick(self.root.sidebar.get_pressed(), new_name, res, min_inten, max_inten)
-        self.root.data_storage.add_data(data=new_data, name=new_name)
-
-    def cus_script(self):
-        if self.root.sidebar.get_pressed() is not None:
-            ScriptApp(self.root, self.root.sidebar.get_pressed())
+        self.root.data_storage.add_data(new_data)
 
     def ratio_sep(self):
         if self.root.sidebar.get_pressed() is not None:
@@ -419,6 +427,7 @@ class MainPic(tk.Frame):
         self.graph_canvas.graph()
 
 
+# Changes how the data is viewed in the MatplotLib window
 class GraphTypeWin(RootExpansion):
     def __init__(self, dataset):
         super().__init__()
@@ -429,13 +438,13 @@ class GraphTypeWin(RootExpansion):
         # Procedurally generates gui
         self.message_list = []
         self.entry_list = []
-        self.gtypes = ["None", "Line", "Scatter", "Stem"]
+        self.gtypes = ("None", "Line", "Scatter", "Stem")
         index = 0
         for column in dataset.data_frame.columns.values.tolist():
             message = tk.Message(master=self, text=column + ":", width=150)
             types = ttk.Combobox(master=self, state="readonly")
             types['values'] = self.gtypes
-            types.current(self.gtypes.index(self.dataset.graph.column_gtypes[column]))
+            types.current(self.gtypes.index(graph.gtype_from_val[dataset.graph.column_gtypes[column]]))
 
             self.message_list.append(message)
             self.entry_list.append(types)
@@ -455,6 +464,8 @@ class GraphTypeWin(RootExpansion):
         input_list = []
         for boxes in self.entry_list:
             input_list.append(boxes.get())
+        for element in range(0, len(input_list)):
+            input_list[element] = graph.gtype_from_string[input_list[element]]
         self.dataset.graph.modify_gtypes(input_list)
         self.destroy()
 
@@ -562,16 +573,15 @@ class ExcelFrame(tk.Frame):
 
 # Window for selecting the name of a certain dataset
 class DataInfoSelector(RootExpansion):
-    def __init__(self, name: AnyStr, data_columns, callback: Callable, is_gen: bool):
+    def __init__(self, callback: Callable[[pd.DataFrame, str, str], None], df: pd.DataFrame, name: str = None):
         super().__init__()
 
         # Callback
         self.callback = callback
-        self.is_gen = is_gen
-        self.name = name
+        self.df = df
 
         # Customization
-        self.title("Name")
+        self.title("Info")
         self.bind('<KeyPress>', self.on_press)
 
         # Members
@@ -579,10 +589,7 @@ class DataInfoSelector(RootExpansion):
         self.name_var = tk.StringVar(self)
         self.name_box = ttk.Entry(master=self, width=20, textvariable=self.name_var)
 
-        if is_gen:
-            self.ax_text = tk.Message(master=self, text="Axis Containing Frequency:", width=300)
-        else:
-            self.ax_text = tk.Message(master=self, text="X-Axis", width=300)
+        self.ax_text = tk.Message(master=self, text="Axis Containing Frequency:", width=300)
 
         self.ax_option = tk.StringVar(self)
         self.ax_box = ttk.Combobox(master=self, textvariable=self.ax_option, state="readonly")
@@ -602,8 +609,10 @@ class DataInfoSelector(RootExpansion):
         self.focus_force()
 
         # Customization
-        self.ax_box['values'] = data_columns.values.tolist()
-        self.ax_option.set(data_columns[0])
+        self.ax_box['values'] = df.columns.values.tolist()
+        self.ax_option.set(self.ax_box['values'][0])
+        if name is not None:
+            self.name_var.set(name)
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
@@ -611,11 +620,7 @@ class DataInfoSelector(RootExpansion):
 
     # Send the name back to Data
     def enter(self):
-        if self.name_var.get() == "":
-            name = self.name.split("/")[-1]
-        else:
-            name = self.name_var.get()
-        self.callback(name=name, ax=self.ax_option.get(), is_gen=self.is_gen)
+        self.callback(self.df, self.name_var.get(), self.ax_option.get())
         self.destroy()
 
     # Allows pressing enter to proceed
@@ -663,6 +668,7 @@ class ZoomWindow(RootExpansion):
 
         # Customization
         self.bind('<KeyPress>', self.on_press)
+        self.wm_title("Zoom")
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
@@ -765,19 +771,17 @@ class DataModifier(RootExpansion):
 
         # Members
         self.tabs = ttk.Notebook(master=self)
-        self.column_frame = ColumnFrame(self.tabs, self, dataset, caller)
         self.row_frame = RowFrame(self.tabs, self, dataset, caller)
+        self.column_frame = ColumnFrame(self.tabs, self, dataset, caller)
 
         # Customization
         self.wm_title("Data")
-        self.tabs.add(self.column_frame, text="Column")
         self.tabs.add(self.row_frame, text="Row")
+        self.tabs.add(self.column_frame, text="Column")
 
         # Positioning
-        self.pack_slaves()
-        self.pack_propagate(False)
-        self.tabs.pack_propagate(False)
-        self.tabs.pack(expand=True)
+        self.grid()
+        self.tabs.grid(sticky="nsew")
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
@@ -803,7 +807,7 @@ class ColumnFrame(tk.Frame):
 
         # Positioning
         self.remove_text.grid(row=0, column=0)
-        self.remove_box.grid(row=1, column=0)
+        self.remove_box.grid(row=1, column=0, padx=20)
         self.remove_button.grid(row=1, column=1)
         self.info_text.grid(row=2, column=1, columnspan=2)
 
@@ -859,16 +863,16 @@ class RowFrame(tk.Frame):
 
         # Positioning
         self.remove_rowval_text.grid(row=0, column=0)
-        self.remove_rowval_drop.grid(row=1, column=0)
-        self.remove_rowval_entry.grid(row=2, column=0)
+        self.remove_rowval_drop.grid(row=1, column=0, padx=10)
+        self.remove_rowval_entry.grid(row=2, column=0, pady=5)
         self.remove_rowval_button.grid(row=2, column=1, padx=10)
         self.remove_val_text.grid(row=3, column=0)
-        self.remove_val_drop.grid(row=4, column=0)
-        self.remove_val_entry.grid(row=5, column=0)
+        self.remove_val_drop.grid(row=4, column=0, padx=10)
+        self.remove_val_entry.grid(row=5, column=0, pady=5)
         self.remove_val_button.grid(row=5, column=1, padx=10)
         self.modify_val_message.grid(row=6, column=0)
-        self.modify_val_col.grid(row=7, column=0)
-        self.modify_val_entry.grid(row=8, column=0)
+        self.modify_val_col.grid(row=7, column=0, padx=10)
+        self.modify_val_entry.grid(row=8, column=0, pady=5)
         self.modify_val_button.grid(row=8, column=1, padx=10)
         self.info.grid(row=9, column=0, columnspan=2)
 
@@ -885,11 +889,11 @@ class RowFrame(tk.Frame):
     def remove_val_command(self, whole_row=False):
         if not whole_row and self.remove_val_entry_var.get() == "":
             return
+
         command = self.remove_rowval_entry_var.get() if whole_row else self.remove_val_entry_var.get()
         axis = self.remove_rowval_var.get() if whole_row else self.remove_val_var.get()
         command_list = None
-        # Problem: Command can contain spaces inside the column titles
-        # Solution: Put all titles in brackets
+
         # RegEx to find all values in between brackets
         keywords = re.findall("(?<={)(.*?)(?=})", command)
         if len(keywords) != 0:
@@ -939,11 +943,11 @@ class ExportDataWin(RootExpansion):
         self.location_text = tk.Message(master=self, text="File Location:", width=150)
         self.location_var = tk.StringVar(self)
         self.location_entry = ttk.Entry(master=self, textvariable=self.location_var, width=30)
-        self.location_button = tk.Button(master=self, text="Browse", command=self.browse_location)
+        self.location_button = ttk.Button(master=self, text="Browse", command=self.browse_location)
         self.type_message = tk.Message(master=self, text="File Output Type:", width=150)
         self.type_var = tk.StringVar(self)
         self.type_entry = ttk.Combobox(master=self, textvariable=self.type_var, state="readonly")
-        self.enter_button = tk.Button(master=self, text="Enter", command=self.enter)
+        self.enter_button = ttk.Button(master=self, text="Enter", command=self.enter)
 
         # Positioning
         self.name_text.grid(row=0, column=0, columnspan=2, padx=10, pady=5)
@@ -976,76 +980,13 @@ class ExportDataWin(RootExpansion):
             self.destroy()
 
 
-class ScriptApp(RootExpansion):
-    def __init__(self, caller, dataset: data.Data):
-        super().__init__()
-
-        # Back ref
-        self.caller = caller
-        self.data = dataset
-
-        self.mod_name = ""
-
-        # Members
-        self.script_message = tk.Message(master=self, text="Path of Script to Run:", width=200)
-        self.script_var = tk.StringVar(self)
-        self.script_entry = ttk.Entry(master=self, textvariable=self.script_var, width=30)
-        self.script_browse = tk.Button(master=self, text="Browse", command=self.browse)
-        self.func_message = tk.Message(master=self, text="Function Name:", width=150)
-        self.func_entry = ttk.Entry(master=self, width=30)
-        self.col_message = tk.Message(master=self, text="Target Axis:")
-        self.col_box = ttk.Combobox(master=self, state="readonly")
-        self.info_var = tk.StringVar(self, value="Always make sure scripts are safe!")
-        self.info = tk.Message(master=self, textvariable=self.info_var, width=250)
-        self.execute_button = tk.Button(master=self, text="Execute", command=self.execute)
-
-        # Positioning
-        self.script_message.grid(row=0, column=0, columnspan=2, padx=10, pady=5)
-        self.script_entry.grid(row=1, column=0, padx=10, pady=5)
-        self.script_browse.grid(row=1, column=1, padx=10, pady=5)
-        self.func_message.grid(row=2, column=0, columnspan=2, padx=10, pady=5)
-        self.func_entry.grid(row=3, column=0, columnspan=2, padx=10, pady=5)
-        self.col_message.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
-        self.col_box.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
-        self.info.grid(row=6, column=0, columnspan=2, padx=10, pady=5)
-        self.execute_button.grid(row=7, column=0, columnspan=2, padx=10, pady=5)
-
-        # Customization
-        self.app_width = self.percent_width(18)
-        self.app_height = self.percent_height(32)
-        self.center_root(self.app_width, self.app_height)
-        self.col_box['values'] = dataset.data_frame.columns.values.tolist()
-
-    def execute(self):
-        if self.mod_name != "":
-            try:
-                spec = importlib.util.spec_from_file_location(self.mod_name, self.script_entry.get())
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[self.mod_name] = module
-                spec.loader.exec_module(module)
-                function = getattr(module, self.func_entry.get())
-                if self.col_box.get() != "":
-                    self.data.extern_modify(func=function, col=self.col_box.get())
-                    self.destroy()
-            except AttributeError:
-                self.info_var.set("Function not found in module")
-
-    def browse(self):
-        file = tk.filedialog.askopenfilename()
-        self.focus_force()
-        if file != "" and file.split(sep=".")[1] == "py":
-            self.script_var.set(file)
-            self.mod_name = file.split("\\")[-1].replace(".py", "")
-        else:
-            self.info_var.set("This program only accepts python scripts (.py)")
-
-
 class MergeWindow(RootExpansion):
-    def __init__(self, callback: Callable, data_list: list[data.Data]):
+    def __init__(self, callback: Callable, owner: App, who: data.Data):
         super().__init__()
 
         # Back Refs
         self.callback = callback
+        self.owner = owner
 
         # Members
         self.to_merge_message = tk.Message(master=self, text="Merge With:", width=300)
@@ -1067,7 +1008,12 @@ class MergeWindow(RootExpansion):
         self.enter_button.grid(row=4, column=0, columnspan=2, padx=20, pady=5)
 
         # Customization
-        self.to_merge_box['values'] = data_list
+        data_names = []
+        for dataset in owner.data_storage.data_list:
+            if dataset.name != who.name:
+                data_names.append(dataset.name)
+
+        self.to_merge_box['values'] = data_names
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
@@ -1076,11 +1022,15 @@ class MergeWindow(RootExpansion):
     def enter(self):
         if self.to_merge_box.get() != "":
             try:
+                to_merge = None
                 thresh = int(self.threshold_var.get())
+                for dat in self.owner.data_storage.data_list:
+                    if self.to_merge_box.get() == dat.name:
+                        to_merge = dat.name
+                self.callback(to_merge, bool(self.combine_var.get()), thresh)
+                self.destroy()
             except ValueError:
                 return
-            self.callback(self.to_merge_box.get(), bool(self.combine_var.get()), thresh)
-            self.destroy()
 
 
 class MergeConflictWindow(RootExpansion):
@@ -1190,11 +1140,11 @@ class SplitWindow(RootExpansion):
 
 
 class ExportGraphWin(RootExpansion):
-    def __init__(self, graph: data.Data):
+    def __init__(self, graph_dat: data.Data):
         super().__init__()
 
         # Back Ref
-        self.graph = graph
+        self.graph = graph_dat
 
         # Members
         self.name_text = tk.Message(master=self, text="Name of New File:", width=150)
@@ -1202,11 +1152,11 @@ class ExportGraphWin(RootExpansion):
         self.location_text = tk.Message(master=self, text="File Location:", width=150)
         self.location_var = tk.StringVar(self)
         self.location_entry = ttk.Entry(master=self, textvariable=self.location_var, width=30)
-        self.location_button = tk.Button(master=self, text="Browse", command=self.browse_location)
+        self.location_button = ttk.Button(master=self, text="Browse", command=self.browse_location)
         self.type_message = tk.Message(master=self, text="Graph Type:", width=150)
         self.type_var = tk.StringVar(self)
         self.type_entry = ttk.Combobox(master=self, textvariable=self.type_var, state="readonly")
-        self.enter_button = tk.Button(master=self, text="Enter", command=self.enter)
+        self.enter_button = ttk.Button(master=self, text="Enter", command=self.enter)
 
         # Positioning
         self.name_text.grid(row=0, column=0, columnspan=2, padx=10, pady=5)
@@ -1238,65 +1188,7 @@ class ExportGraphWin(RootExpansion):
             self.destroy()
 
 
-class FileAssociation(RootExpansion):
-    def __init__(self, file_manager: utils.FileManager):
-        super().__init__()
-
-        # Back ref
-        self.file_manager = file_manager
-
-        # Members
-        self.type_message = tk.Message(master=self, text="Extension of File:")
-        self.type_entry = ttk.Entry(master=self)
-        self.path_message = tk.Message(master=self, text="Path of Script:", width=300)
-        self.path_var = tk.StringVar(self)
-        self.path_entry = ttk.Entry(master=self, textvariable=self.path_var)
-        self.mod_name = None
-        self.browse_button = tk.Button(master=self, text="Browse", command=self.browse)
-        self.func_message = tk.Message(master=self, text="Name of Function:", width=300)
-        self.func_entry = ttk.Entry(master=self)
-        self.info_var = tk.StringVar(self, value="")
-        self.info_text = tk.Message(master=self, textvariable=self.info_var, width=300)
-        self.add_button = tk.Button(master=self, text="Add", command=self.add)
-
-        self.type_message.grid(row=0, column=0, columnspan=2, padx=10, pady=5)
-        self.type_entry.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
-        self.path_message.grid(row=2, column=0, columnspan=2, padx=10, pady=5)
-        self.path_entry.grid(row=3, column=0, padx=10, pady=5)
-        self.browse_button.grid(row=3, column=1, padx=10, pady=5)
-        self.func_message.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
-        self.func_entry.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
-        self.info_text.grid(row=6, column=0, columnspan=2, padx=10, pady=5)
-        self.add_button.grid(row=7, column=0, columnspan=2, padx=10, pady=5)
-
-        self.update()
-        self.center_root(self.winfo_width(), self.winfo_height())
-
-    def add(self):
-        if self.mod_name != "":
-            try:
-                spec = importlib.util.spec_from_file_location(self.mod_name, self.path_entry.get())
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[self.mod_name] = module
-                spec.loader.exec_module(module)
-                function = getattr(module, self.func_entry.get())
-                if self.type_entry.get() != "":
-                    self.file_manager.new_association(self.type_entry.get(), function)
-            except AttributeError:
-                self.info_var.set("Function not found in module")
-
-    def browse(self):
-        file = tk.filedialog.askopenfilename()
-        self.focus_force()
-        if file != "" and file.split(sep=".")[1] == "py":
-            self.path_var.set(file)
-            self.mod_name = file.split("\\")[-1].replace(".py", "")
-        elif file == "":
-            return
-        else:
-            self.info_var.set("Python (.py) file required")
-
-
+# Changes the size of the MatplotLib canvas in case that it does not fit correctly
 class ViewModifier(RootExpansion):
     def __init__(self, canvas: gph.GraphCanvas):
         super().__init__()
@@ -1309,9 +1201,9 @@ class ViewModifier(RootExpansion):
         self.width_var = tk.StringVar(master=self, value=canvas.figure.get_size_inches()[0])
         self.width_entry = ttk.Entry(master=self, textvariable=self.width_var, width=10)
         self.height_message = tk.Message(master=self, text="Height:", width=150)
-        self.height_var = ttk.StringVar(master=self, value=canvas.figure.get_size_inches()[1])
-        self.height_entry = tk.Entry(master=self, textvariable=self.height_var, width=10)
-        self.enter_button = tk.Button(master=self, command=self.enter, text="Enter")
+        self.height_var = tk.StringVar(master=self, value=canvas.figure.get_size_inches()[1])
+        self.height_entry = ttk.Entry(master=self, textvariable=self.height_var, width=10)
+        self.enter_button = ttk.Button(master=self, command=self.enter, text="Enter")
 
         # Positioning
         self.width_message.grid(row=0, column=0, pady=5, padx=10)
@@ -1319,6 +1211,9 @@ class ViewModifier(RootExpansion):
         self.height_message.grid(row=0, column=1, pady=5, padx=10)
         self.height_entry.grid(row=1, column=1, pady=5, padx=10)
         self.enter_button.grid(row=1, column=2, pady=5, padx=10)
+
+        # Customization
+        self.title("Graph Size")
 
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
@@ -1400,6 +1295,8 @@ class RatioWin(RootExpansion):
         self.owner = owner
 
         # Members
+        self.is_single_flag = False
+
         self.step_1_box = ttk.LabelFrame(master=self, text="Step 1:")
         self.axis_message = tk.Message(master=self.step_1_box, text="Against:", width=150)
         self.axis_var = tk.StringVar(self.step_1_box)
@@ -1407,14 +1304,14 @@ class RatioWin(RootExpansion):
         self.enter_axis_button = ttk.Button(master=self.step_1_box, text="Enter", command=self.enter_axis)
 
         self.step_2_box = ttk.LabelFrame(master=self, text="Step 2:")
+        self.axis_from_text = tk.Message(master=self.step_2_box, text="Axis to Remove From:", width=150)
+        self.axis_from_var = tk.StringVar(self)
+        self.axis_from_entry = ttk.Combobox(master=self.step_2_box, )
         self.ratio_message = tk.Message(master=self.step_2_box, text="Target Ratio:", width=150)
         self.ratio_entry = ttk.Entry(master=self.step_2_box)
         self.margin_message = tk.Message(master=self.step_2_box, text="Margin:", width=150)
         self.margin_entry = ttk.Entry(master=self.step_2_box)
         self.ratio_exe = ttk.Button(master=self.step_2_box, text="Execute", command=self.ratio_margin_command)
-
-        self.step_3_box = tk.LabelFrame(master=self, text="Step 3:")
-        self.regen_spec_button = ttk.Button(master=self, text="Regenerate Spectrum", command=self.regen_spec)
 
         self.include_var = tk.StringVar(self.step_2_box, value="i")
         self.include_button = ttk.Radiobutton(master=self.step_2_box, text="Include", variable=self.include_var,
@@ -1446,44 +1343,49 @@ class RatioWin(RootExpansion):
         axis_list.remove(dataset.freq_ax)
         self.axis_box['values'] = axis_list
 
+        if self.dataset.is_ratio:
+            self.axis_box["state"] = "disabled"
+            self.enter_axis_button["state"] = "disabled"
+
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
 
     def enter_axis(self):
         if self.axis_var.get() != "":
             data.calc_ratios(self.dataset, self.axis_var.get())
-            return True
-        else:
-            return False
+            self.dataset.is_ratio = True
+            self.destroy()
 
     def ratio_margin(self):
         if self.axis_var.get() != "" and self.ratio_entry.get() != "" and self.margin_entry.get() != "":
             axis = self.axis_var.get()
-            margin = self.margin_entry.get()
-            ratio = self.ratio_entry.get()
-            dictionary = data.calc_ratios(self.dataset, axis)
-            if self.include_var == "e":
-                for column in dictionary:
-                    self.dataset.remove_data(value=["$" + dictionary[column], ">", str(float(ratio) + float(margin))],
-                                             axis=column, whole_row=True)
-                    self.dataset.remove_data(value=["$" + dictionary[column], "<", str(float(ratio) - float(margin))],
-                                             axis=column, whole_row=True)
+            df = self.dataset.data_frame
+
+            try:  # Convert values to floats
+                margin = float(self.margin_entry.get())
+                ratio = float(self.ratio_entry.get())
+            except ValueError:
+                self.info_var.set("Please input a number")
+                return
+
+            # Generate ratios
+            ratio_columns = data.calc_ratios(self.dataset, axis)
+            self.dataset.is_ratio = True
+
+            if self.include_var == "e":  # 'e' stands for exclude, the else is if its 'i' for include
+                for column in ratio_columns:  # Only use for columns that have a ratio calculated
+                    self.dataset.data_frame = df[(df[ratio_columns[column]] > ratio + margin)
+                                                 | (df[ratio_columns[column]] < ratio - margin)]
             else:
-                for column in dictionary:
-                    self.dataset.data_frame = self.dataset.data_frame[
-                        ((float(ratio) - float(margin)) < self.dataset.data_frame[dictionary[column]])
-                        & (self.dataset.data_frame[dictionary[column]] < (float(ratio) + float(margin)))]
-                return dictionary
+                for column in ratio_columns:
+                    self.dataset.data_frame = df[(df[ratio_columns[column]] > ratio - margin)
+                                                 & (df[ratio_columns[column]] < ratio + margin)]
+                return ratio_columns
 
     def ratio_margin_command(self):
         self.ratio_margin()
         self.owner.main_pic.update_graph()
         self.destroy()
-
-    def regen_spec(self):
-        mod_list = list(self.ratio_margin().keys())
-        line_width = 0.035
-        data.regen_spec(self.dataset, mod_list, line_width)
 
 
 class SimilarRemoveWindow(RootExpansion):
@@ -1504,6 +1406,9 @@ class SimilarRemoveWindow(RootExpansion):
         self.include_check = ttk.Checkbutton(master=self, text="Include List of Removed", variable=self.include_var)
         self.replace_var = tk.IntVar(self)
         self.replace_check = ttk.Checkbutton(master=self, text="Replace Known", variable=self.replace_var)
+        self.include_var = tk.IntVar(self)
+        self.include_check = ttk.Checkbutton(master=self, text="Include", variable=self.include_var,
+                                             command=self.include_command)
         self.enter_button = ttk.Button(master=self, command=self.enter, text="Enter")
 
         # Positioning
@@ -1535,6 +1440,13 @@ class SimilarRemoveWindow(RootExpansion):
                 self.destroy()
             except ValueError:
                 pass  # If value is not a number, then ignore the input
+
+    def include_command(self):
+        if self.replace_check["state"] == "disabled":
+            self.replace_check["state"] = "normal"
+        else:
+            self.replace_var.set(0)
+            self.replace_check["state"] = "disabled"
 
 
 class DataSettingsUpdater(RootExpansion):
@@ -1581,10 +1493,3 @@ class DataSettingsUpdater(RootExpansion):
             self.dataset.ax = self.ax_var.get()
             self.dataset.owner.sidebar.update_data()
             self.destroy()
-
-
-class ButtonStyle(ttk.Style):
-    def __init__(self, master):
-        super().__init__(master)
-
-        self.configure(style="Bargle.TButton", background="white")

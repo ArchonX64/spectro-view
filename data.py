@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import os
-
 import numpy as np
 import pandas as pd
 
 import peaky
-import utils
 import gui
 import graph as gph
 
@@ -15,49 +12,29 @@ import copy
 from typing import Callable, AnyStr, Union, Any
 
 
-# Container class for a pandas DataFrame. Contains additional information such as the name...etc.
-# Looks messy cause python doesn't allow overloaded constructors >:(
+# Container class for a pandas DataFrame, with additional information relative to this app's functions
 class Data:
-    def __init__(self, data_frame: pd.DataFrame, owner: gui.App, name: AnyStr, freq_ax: AnyStr = None,
-                 gtypes: list[AnyStr] = None):
-        assert isinstance(data_frame, pd.DataFrame)
+    def __init__(self, data_frame: pd.DataFrame, owner: gui.App, name: str, freq_ax: str, x_ax: str = None,
+                 gtypes: dict = None, is_ratio: bool = False):
         self.data_frame = data_frame
         self.owner = owner
         self.name = name
-        self.temp_gtypes = gtypes
-        self.dup_num = 1
-        if freq_ax is None:
-            self.ax = None
-            self.freq_ax = None
-            self.gen_info()
-        elif freq_ax is not None:
-            self.freq_ax = freq_ax
+        self.freq_ax = freq_ax
+        self.gtypes = gtypes
+        if x_ax is None:
             self.ax = freq_ax
-            self.graph = gph.Graph(self)
-            self.data_frame.sort_values(by=self.freq_ax, inplace=True)
+        else:
+            self.ax = x_ax
+        self.graph = gph.Graph(self, gtypes)
+        self.is_ratio = is_ratio
 
-    def gen_info(self):
-        gui.DataInfoSelector(name=self.name, data_columns=self.data_frame.columns, callback=self.fin_setup, is_gen=True)
-
-    def update_info(self):
-        gui.DataInfoSelector(name=self.name, data_columns=self.data_frame.columns, callback=self.fin_setup, is_gen=False)
-
-    def add_column(self, name, series):
+    def add_column(self, name, series) -> None:
         self.data_frame[name] = series
         self.graph.column_gtypes[name] = "Line"
 
-    def similar_copy(self, data_frame: pd.DataFrame, name: str) -> Data:
-        return Data(name=name, data_frame=data_frame, freq_ax=self.freq_ax, gtypes=self.graph.column_gtypes,
-                    owner=self.owner)
-
-    def fin_setup(self, name: AnyStr, ax: AnyStr, is_gen: bool):
-        self.name = name
-        self.ax = ax
-        if is_gen:
-            self.freq_ax = ax
-            self.owner.data_storage.add_data(data=self, name=name)
-            self.graph = gph.Graph(self, self.temp_gtypes)
-        self.data_frame.sort_values(by=self.freq_ax, inplace=True)
+    def copy(self) -> Data:
+        return Data(name=self.name + "*", data_frame=self.data_frame.copy(True), freq_ax=self.freq_ax, gtypes=self.graph.column_gtypes.copy(),
+                    owner=self.owner, x_ax=self.ax)
 
     def remove_data(self, value: list[Any], axis, whole_row: bool):
         length = len(value)
@@ -133,7 +110,7 @@ class Data:
         self.owner.data_storage.add_data(name=self.name + " (mod)", data=func(df=self.data_frame, x=self.ax, col=col))
 
     def replicate(self):
-        self.owner.data_storage.add_data(name="*" + self.name, data=self.data_frame.copy(deep=True), gtypes=self.graph.column_gtypes)
+        self.owner.data_storage.add_data(self.copy())
 
     def merge(self):
         data_list = []
@@ -141,22 +118,24 @@ class Data:
             if data.dataset != self:
                 data_list.append(data.dataset.name)
         if len(data_list) > 0:
-            gui.MergeWindow(self.merge_callback, data_list)
+            gui.MergeWindow(self.merge_callback, self.owner, self)
 
     def merge_callback(self, to_merge: str, combine: bool, threshold: int):
         for data in self.owner.sidebar.dataset_texts:
             if data.dataset.name == to_merge:
-                to_merge = data.dataset
+                to_merge_dat = data.dataset
                 break
-        merged = pd.merge(left=self.data_frame, right=to_merge.data_frame,
-                          left_on=self.freq_ax, right_on=to_merge.freq_ax,
-                          how="outer")
-        new_gtypes = self.graph.column_gtypes.copy()
-        for gtype in to_merge.graph.column_gtypes:
-            if gtype in new_gtypes:
-                new_gtypes[gtype + "*"] = to_merge.graph.column_gtypes[gtype]
-            else:
-                new_gtypes[gtype] = to_merge.graph.column_gtypes[gtype]
+
+        new_m = to_merge_dat.data_frame.copy(deep=True)
+        new_m.rename(columns={to_merge_dat.freq_ax: self.freq_ax}, inplace=True)
+        for column_s in self.data_frame.columns:
+            for column_m in to_merge_dat.data_frame.columns:
+                if column_s == column_m and column_s != self.freq_ax and column_m != to_merge_dat.freq_ax:
+                    new_m.rename(columns={column_m: column_m + " (" + to_merge_dat.name + ")"},
+                                 inplace=True)
+                    to_merge_dat.rename(columns={column_m: column_m + " (" + to_merge_dat.name + ")"},
+                                        inplace=True)
+        merged = pd.merge(on=self.freq_ax, left=self.data_frame, right=new_m, how="outer")
 
         already_found = []
         to_rename = {}
@@ -166,9 +145,14 @@ class Data:
             else:
                 already_found.append(column)
         merged.rename(mapper=to_rename)
-        merged_data = Data(data_frame=merged, owner=self.owner, name=self.name + " + " + to_merge.name,
-                           freq_ax=self.freq_ax, gtypes=new_gtypes)
-        self.owner.data_storage.add_data(name=merged_data.name, data=merged_data, gtypes=new_gtypes)
+
+        new_gtypes = {}
+        for column in merged.columns:
+            new_gtypes[column] = gph.LINE
+
+        merged_data = Data(data_frame=merged, owner=self.owner, name=self.name + " + " + to_merge_dat.name,
+                           freq_ax=self.freq_ax, gtypes=new_gtypes, x_ax=self.ax)
+        self.owner.data_storage.add_data(data=merged_data)
 
         if combine:
             # For this section, we assume that frequencies are close enough together that intensities between
@@ -237,37 +221,19 @@ class Data:
 class DataStorage:
     def __init__(self, root: gui.App):
         self.root = root
-
         self.data_list = []
         self.temp_storage = None  # Temporary storage so that the dataset isn't garbage collected accidentally
 
-        '''try:
-            var_file = open(file=utils.resource_path("pref.svd"), mode="r")
-            self.peak_min = float(var_file.readline())
-            self.peak_max = float(var_file.readline())
-        except FileNotFoundError:
-            pass
-            
-        except ValueError:
-            gui.error("The preference file in " + utils.resource_path("pref.svd") + " is corrupted or incorrect.\n"
-                                                                                    "A new file will be created.")'''
-
-    def add_data(self, data: Union[Data, pd.DataFrame], name: AnyStr = None, gtypes: list[AnyStr] = None):
-        if isinstance(data, pd.DataFrame) and name is not None:  # If a DataFrame is added, it is passed to a Data constructor to be properly wrapped
-            self.temp_storage = Data(name=name, data_frame=data, owner=self.root, gtypes=gtypes)
-            return
-        elif isinstance(data, Data):
-            self.data_list.append(data)
-            self.root.sidebar.update_data()
-        else:
-            raise utils.InvalidTypeException
+    def add_data(self, data: Data):
+        self.data_list.append(data)
+        self.root.sidebar.update_data()
 
     def remove_data(self, data):
         self.data_list.remove(data)
         self.root.sidebar.update_data()
 
 
-def peak_pick(data: Data, name: AnyStr, res: float, inten_min: float, inten_max: float):
+def peak_pick(data: Data, name: AnyStr, res: float, inten_min: float, inten_max: float) -> Data:
     data_frame = data.data_frame
     new_data = pd.DataFrame()  # Create new dataframe
     is_new = True
@@ -276,7 +242,7 @@ def peak_pick(data: Data, name: AnyStr, res: float, inten_min: float, inten_max:
     for column in data_frame.columns:  # Copy each column into the new dataframe
         if column == data.freq_ax:  # Don't create dataframe with double frequency axes
             continue
-        if data.graph.column_gtypes[column] == "None":
+        if data.graph.column_gtypes[column] == gph.NONE:  # Allows control over peak pick on certain axes
             continue
         partial_frame = data_frame.copy(deep=True)  # Copy dataframe into new frame
         to_drop = []
@@ -301,32 +267,20 @@ def peak_pick(data: Data, name: AnyStr, res: float, inten_min: float, inten_max:
     return Data(data_frame=new_data, owner=data.owner, name=name, freq_ax=data.freq_ax)
 
 
-def calc_ratios(dataset: Data, against):
+def calc_ratios(dataset: Data, against):  # against is the column that the other columns will be divided by
     df = dataset.data_frame
     columns = df.columns.values.tolist()
-    columns.remove(against)
-    columns.remove(dataset.freq_ax)
+
+    columns.remove(against)  # Prevent creating a ratio of against with against
+    columns.remove(dataset.freq_ax)  # Prevent creating ratios with the frequency axis
+
     column_dict = {}
     for column in columns:
         name = column + "/" + against
         dataset.add_column(name=name, series=df[column] / df[against])
         dataset.graph.column_gtypes[name] = "None"
         column_dict[column] = name
-    return column_dict
-
-
-def regen_spec(dataset: Data, mod_list: list, line_width: Union[float, int]):
-    df = dataset.data_frame
-    # Copied from Rebecca Peeble's New Spectrum Generator
-    step = line_width / 2.8
-    nfreq = pd.DataFrame(math.ceil((df[dataset.freq_ax].cummax() - df[dataset.freq_ax].cummin()) / step),
-                         columns=[dataset.freq_ax])
-    # Expand resolution
-    df = pd.merge(left=df, right=nfreq, how="outer", on=dataset.freq_ax)
-    index = 0
-    for column in mod_list:
-        transint = df[column][index]
-        transfreq = df[dataset.freq_ax][index]
+    return column_dict  # Returns a dictionary with each column and corresponding ratio column
 
 
 def remove_from(on: Data, values_from: Data, threshold: Union[int, float], return_removed: bool, add_back: bool):
@@ -353,9 +307,14 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float], retur
                 index += 1
                 break
         on_index += 1
-    removed = on.similar_copy(data_frame=on.data_frame.loc[to_drop[0:index]], name=on.name + " (removed)")
-    new_on = on.similar_copy(data_frame=on.data_frame.drop(axis=0, labels=to_drop[0:index]),
-                             name=on.name + " - " + values_from.name)
+    removed = on.copy()
+    removed.data_frame = on.data_frame.on.data_frame.loc[to_drop[0:index]]
+    removed.name = on.name + " (removed)"
+
+    new_on = on.copy()
+    new_on.data_frame = on.data_frame.drop(axis=0, labels=to_drop[0:index])
+    new_on.name = on.name + " - " + values_from.name
+
     on.owner.data_storage.add_data(new_on)
     if add_back:
         def renamer(name):
@@ -364,11 +323,9 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float], retur
             else:
                 return name
         to_back = removed.data_frame.rename(mapper=renamer, axis=1)
-        print(to_back)
         on.data_frame = pd.merge(left=on.data_frame, right=to_back, left_on=on.freq_ax, right_on=removed.freq_ax, how="outer")
         for column in to_back.columns:
             on.graph.column_gtypes[column] = "Line"
     if return_removed:
         on.owner.data_storage.add_data(removed)
-
 

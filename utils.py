@@ -64,7 +64,7 @@ class File:
 
 
 class FileManager:
-    def __init__(self, owner):
+    def __init__(self, owner: gui.App):
         self.owner = owner
 
         self.allowed_type = ['txt', 'xlsx', 'csv', 'cat', 'ft', 'dat', 'fit']
@@ -112,7 +112,11 @@ class FileManager:
             gui.CsvApp(callback=self.csv_callback, file=file)
             return
         elif file.type == 'cat':
-            loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
+            try:
+                loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
+            except ValueError:
+                gui.error("The file that was uploaded ")
+                return
             dataset = pd.DataFrame(columns=["Frequency (MHz)", inten_name])
             dataset["Frequency (MHz)"] = loaded[:, 0]
             dataset[inten_name] = loaded[:, 1]
@@ -133,7 +137,7 @@ class FileManager:
         else:
             gui.error("Unsupported File Type")
             return
-        self.owner.data_storage.add_data(name=file.name.split("\\")[-1], data=dataset)
+        gui.DataInfoSelector(callback=self.finalize_data, df=dataset, name=file.name.split("/")[-1])
 
     # info is a list [[1,0],[-1,1]], where the lists are the starting/ending rows and -1 indicates that it goes to eof
     def csv_callback(self, root, file: File, is_full: bool, info=None):
@@ -160,8 +164,13 @@ class FileManager:
             except pandas.errors.ParserError:
                 messagebox.showerror("Error", "Rows and columns selected are unable to be read")
                 return
-        # Add created dataset to the DataStorage of the main app
-        self.owner.data_storage.add_data(name=file.name, data=dataset)
+        # Send to DataInfoSelector to get name and freq_axis
+        gui.DataInfoSelector(callback=self.finalize_data, df=dataset, name=file.name.split("/")[-1])
+
+    # Is called by DataInfoSelector once name and freq_axis found
+    def finalize_data(self, df: pd.DataFrame, name: str, freq_ax: str):
+        dat = data.Data(data_frame=df, owner=self.owner, name=name, freq_ax=freq_ax)
+        self.owner.data_storage.add_data(dat)
 
     def new_association(self, file_type, func):
         self.custom_type.append(file_type)
