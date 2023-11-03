@@ -278,7 +278,7 @@ def calc_ratios(dataset: Data, against):  # against is the column that the other
     for column in columns:
         name = column + "/" + against
         dataset.add_column(name=name, series=df[column] / df[against])
-        dataset.graph.column_gtypes[name] = "None"
+        dataset.graph.column_gtypes[name] = gph.NONE
         column_dict[column] = name
     return column_dict  # Returns a dictionary with each column and corresponding ratio column
 
