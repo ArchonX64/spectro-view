@@ -6,10 +6,20 @@ import pandas as pd
 import peaky
 import gui
 import graph as gph
+import pickle
 
 import math
 import copy
 from typing import Callable, AnyStr, Union, Any
+
+
+class PickledData:
+    def __init__(self, dataset: Data):
+        self.data_frame = dataset.data_frame
+        self.name = dataset.name
+        self.gtypes = dataset.graph.column_gtypes
+        self.freq_ax = dataset.freq_ax
+        self.is_ratio = dataset.is_ratio
 
 
 # Container class for a pandas DataFrame, with additional information relative to this app's functions
@@ -216,6 +226,12 @@ class Data:
             inverse_gtypes.pop(value)
         self.owner.data_storage.add_data(name=self.name + "(split)", data=new_dat, gtypes=inverse_gtypes)
 
+    def save(self, location):
+        with open(location + "\\" + self.name + ".spd", "wb") as outfile:
+            to_pickle = PickledData(self)
+            pickle.dump(to_pickle, outfile)
+        outfile.close()
+
 
 # Where all the opened datasets are held
 class DataStorage:
@@ -308,7 +324,7 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float], retur
                 break
         on_index += 1
     removed = on.copy()
-    removed.data_frame = on.data_frame.on.data_frame.loc[to_drop[0:index]]
+    removed.data_frame = on.data_frame.loc[to_drop[0:index]]
     removed.name = on.name + " (removed)"
 
     new_on = on.copy()

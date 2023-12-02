@@ -9,6 +9,7 @@ import pandas.errors
 import pandas as pd
 from xlsx2csv import Xlsx2csv
 import sys
+from pickle import load
 
 import gui
 import data
@@ -67,7 +68,7 @@ class FileManager:
     def __init__(self, owner: gui.App):
         self.owner = owner
 
-        self.allowed_type = ['txt', 'xlsx', 'csv', 'cat', 'ft', 'dat', 'fit']
+        self.allowed_type = ['txt', 'xlsx', 'csv', 'cat', 'ft', 'dat', 'fit', 'spd']
         self.custom_type = []
         self.custom_funcs = {}
 
@@ -110,6 +111,14 @@ class FileManager:
             return
         elif file.type == 'csv':
             gui.CsvApp(callback=self.csv_callback, file=file)
+            return
+        elif file.type == "spd":
+            with open(file.path, "rb") as infile:
+                load_dat = load(infile)
+                new_dat = data.Data(data_frame=load_dat.data_frame, owner=self.owner, name=load_dat.name,
+                                    freq_ax=load_dat.freq_ax, x_ax=load_dat.freq_ax, gtypes=load_dat.gtypes,
+                                    is_ratio=load_dat.is_ratio)
+                self.owner.data_storage.add_data(new_dat)
             return
         elif file.type == 'cat':
             try:

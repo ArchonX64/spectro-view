@@ -7,6 +7,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from typing import Union, AnyStr, Callable
 from tkinter import filedialog, messagebox
+from pickle import dump, load
 
 import pandas as pd
 from matplotlib.backends.backend_tkagg import (
@@ -234,12 +235,16 @@ class Sidebar(tk.Frame):
             self.rightclick_menu.add_command(command=self.dataset.merge, label="Merge")
             self.rightclick_menu.add_command(command=self.dataset.split, label="Split")
             self.rightclick_menu.add_command(command=self.remove, label="Delete")
+            self.rightclick_menu.add_command(command=self.save, label="Save")
 
         def remove(self):
             self.sidebar.root.data_storage.remove_data(self.dataset)
             if self.sidebar.pressed_dataset == self:
                 self.sidebar.pressed_dataset = None
             self.sidebar.update_data()
+
+        def save(self):
+            SaveDatasetWindow(self.dataset)
 
         def on_rightclick(self, event):
             try:
@@ -741,7 +746,7 @@ class PeakPickWindow(RootExpansion):
         self.enter_button.grid(row=6, column=0, columnspan=2, padx=10, pady=10)
 
         # Customization
-        self.wm_title("Peak Pick")
+        self.title("Peak Pick")
         self.update()
         self.center_root(self.winfo_width(), self.winfo_height())
         self.resizable(False, False)
@@ -1493,3 +1498,41 @@ class DataSettingsUpdater(RootExpansion):
             self.dataset.ax = self.ax_var.get()
             self.dataset.owner.sidebar.update_data()
             self.destroy()
+
+
+class SaveDatasetWindow(RootExpansion):
+    def __init__(self, dataset):
+        super().__init__()
+
+        # Back Ref
+        self.dataset = dataset
+
+        # Members
+        self.name_message = tk.Message(master=self, text="Name:", width=150)
+        self.location_message = tk.Message(master=self, text="Location:", width=200)
+        self.location_var = tk.StringVar(self)
+        self.location_entry = ttk.Entry(master=self, textvariable=self.location_var, width=30)
+        self.location_button = ttk.Button(master=self, text="Browse", command=self.browse)
+        self.enter_button = ttk.Button(master=self, text="Enter", command=self.enter)
+
+        # Positioning
+        self.location_message.grid(row=0, column=0, columnspan=2, padx=10, pady=5)
+        self.location_entry.grid(row=1, column=0, padx=10, pady=5)
+        self.location_button.grid(row=1, column=2, padx=10, pady=5)
+        self.enter_button.grid(row=2, column=0, columnspan=2, padx=10, pady=5)
+
+        # Customization
+        self.update()
+        self.center_root(self.winfo_width(), self.winfo_height())
+
+    def enter(self):
+        try:
+            self.dataset.save(self.location_entry.get())
+        except ValueError:
+            error("This is not a valid path")
+        self.destroy()
+
+    def browse(self):
+        path = tk.filedialog.askdirectory()
+        self.location_var.set(path)
+        self.focus_force()
