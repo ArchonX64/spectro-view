@@ -121,11 +121,7 @@ class FileManager:
                 self.owner.data_storage.add_data(new_dat)
             return
         elif file.type == 'cat':
-            try:
-                loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
-            except ValueError:
-                gui.error("The file that was uploaded ")
-                return
+            loaded = np.loadtxt(fname=file.path, usecols=[0, 2])
             dataset = pd.DataFrame(columns=["Frequency (MHz)", inten_name])
             dataset["Frequency (MHz)"] = loaded[:, 0]
             dataset[inten_name] = loaded[:, 1]

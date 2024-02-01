@@ -43,7 +43,8 @@ class Data:
         self.graph.column_gtypes[name] = "Line"
 
     def copy(self) -> Data:
-        return Data(name=self.name + "*", data_frame=self.data_frame.copy(True), freq_ax=self.freq_ax, gtypes=self.graph.column_gtypes.copy(),
+        return Data(name=self.name + "*", data_frame=self.data_frame.copy(True), freq_ax=self.freq_ax,
+                    gtypes=self.graph.column_gtypes.copy(),
                     owner=self.owner, x_ax=self.ax)
 
     def remove_data(self, value: list[Any], axis, whole_row: bool):
@@ -143,8 +144,8 @@ class Data:
                 if column_s == column_m and column_s != self.freq_ax and column_m != to_merge_dat.freq_ax:
                     new_m.rename(columns={column_m: column_m + " (" + to_merge_dat.name + ")"},
                                  inplace=True)
-                    to_merge_dat.rename(columns={column_m: column_m + " (" + to_merge_dat.name + ")"},
-                                        inplace=True)
+                    to_merge_dat.data_frame.rename(columns={column_m: column_m + " (" + to_merge_dat.name + ")"},
+                                                   inplace=True)
         merged = pd.merge(on=self.freq_ax, left=self.data_frame, right=new_m, how="outer")
 
         already_found = []
@@ -169,6 +170,7 @@ class Data:
             # them will be relatively the same.
             to_drop = []
             threshold = threshold / 1000.0  # KHz -> MHz
+            merged_data.data_frame.sort_values(by=merged_data.freq_ax, inplace=True)
             merged_data.data_frame.reset_index(drop=True, inplace=True)
             freq_array = merged_data.data_frame[merged_data.freq_ax].to_numpy()
 
@@ -338,10 +340,11 @@ def remove_from(on: Data, values_from: Data, threshold: Union[int, float], retur
                 return name + " (" + values_from.name + ")"
             else:
                 return name
+
         to_back = removed.data_frame.rename(mapper=renamer, axis=1)
-        on.data_frame = pd.merge(left=on.data_frame, right=to_back, left_on=on.freq_ax, right_on=removed.freq_ax, how="outer")
+        on.data_frame = pd.merge(left=on.data_frame, right=to_back, left_on=on.freq_ax, right_on=removed.freq_ax,
+                                 how="outer")
         for column in to_back.columns:
             on.graph.column_gtypes[column] = "Line"
     if return_removed:
         on.owner.data_storage.add_data(removed)
-

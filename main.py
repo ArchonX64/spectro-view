@@ -16,7 +16,7 @@ if __name__ == "__main__":
         utils.resource_path("LL")
         app = gui.App()
 
-        app.startup()
+        app.mainloop()
     except FileNotFoundError:
         pass
 

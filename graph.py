@@ -28,11 +28,12 @@ class GraphCanvas:
         self.owner = owner
 
         # Members
-        self.figure = plt.Figure(figsize=(12, 5.5), layout='constrained')
+        self.figure = plt.Figure(figsize=(12, 8), layout='compressed')
         self.curr_graph = None
 
         # Customization
         self.figure.get_layout_engine().set(w_pad=0.25, h_pad=0.25)
+
 
     def set_canvas(self, canvas):
         self.canvas = canvas
@@ -63,38 +64,48 @@ class Graph:
                 self.column_gtypes[column] = LINE
         else:
             self.column_gtypes = gtypes
-        self.xmin, self.xmax, self.ymin, self.ymax = None, None, None, None
 
-    def plot(self, plot: plt.Subplot, is_first: bool = False):
-        index = 0
-        for column in self.dataset.data_frame.columns:
-            if column != self.dataset.freq_ax and column != self.dataset.ax:
-                if self.column_gtypes[column] == NONE:
-                    continue
-                if self.column_gtypes[column] == LINE:
-                    plot.plot(self.dataset.data_frame[self.dataset.ax],
-                              self.dataset.data_frame[column], label=column, color="C" + str(index))
-                elif self.column_gtypes[column] == SCATTER:
-                    plot.scatter(self.dataset.data_frame[self.dataset.ax],
-                                 self.dataset.data_frame[column], label=column, c="C" + str(index))
-                elif self.column_gtypes[column] == STEM:
-                    plot.stem(self.dataset.data_frame[self.dataset.ax],
-                              self.dataset.data_frame[column], label=column, linefmt="C" + str(index),
-                              markerfmt="None")
-            index += 1
-        plot.set_xlabel(self.dataset.ax)
-        if self.dataset.ax == self.dataset.freq_ax:
-            plot.set_ylabel("Intensity (V)")
-        if not is_first:
-            plot.set_xlim(left=self.xmin, right=self.xmax)
-            plot.set_ylim(bottom=self.ymin, top=self.ymax)
-            plot.legend()
-            self.scale(plot)
+        # Initialize a maximum and minimum for the x components
+        self.xmin = self.dataset.data_frame[self.dataset.ax].min()
+        self.xmax = self.dataset.data_frame[self.dataset.ax].max()
+        self.ymin, self.ymax = None, None
+
+    def plot(self, plot: plt.Subplot):
+        color_index = 0  # Allows each plot to be a different color
+
         if self.is_auto:
-            plot.autoscale(True)
-            self.is_auto = False
-        self.xmin, self.xmax = plot.get_xlim()
+            self.reset_x()
+            self.ymax, self.ymin = None, None
+
+        # Include only the portions of the spectrum needed to be seen
+        cut_set = self.dataset.data_frame[self.dataset.data_frame[self.dataset.ax].between(self.xmin, self.xmax)]
+
+        # Plot each column present in the dataset
+        for column in self.dataset.data_frame.columns:
+            if column != self.dataset.freq_ax and column != self.dataset.ax and self.column_gtypes[column] != NONE:  # Do not plot frequency axis or x-axis
+                if self.column_gtypes[column] == LINE:
+                    plot.plot(cut_set[self.dataset.ax], cut_set[column],
+                              label=column, color="C" + str(color_index))
+                elif self.column_gtypes[column] == SCATTER:
+                    plot.scatter(cut_set[self.dataset.ax], cut_set[column],
+                                 label=column, c="C" + str(color_index))
+                elif self.column_gtypes[column] == STEM:
+                    plot.stem(cut_set[self.dataset.ax], cut_set[column],
+                              label=column, linefmt="C" + str(color_index), markerfmt="None")
+            color_index += 1
+        plot.set_xlabel(self.dataset.ax)
+
+        # If None is passed for ymin/max above, the graph will autoscale, and we can obtain the values that matplolib gives
+        plot.set_ylim(self.ymin, self.ymax)
         self.ymin, self.ymax = plot.get_ylim()
+
+        # Cutting the spectrum creates inconsistent zooming, so points are placed at the limits
+        plot.scatter((self.xmax, self.xmin), (self.ymax, self.ymin))
+
+        # Hide the additional points
+        thresh = (self.xmax - self.xmin) * 0.01
+        plot.set_xlim(self.xmin + thresh, self.xmax - thresh)
+
         return plot
 
     def plot_3d(self, plot: plt.Subplot, x, y, z, graph_type: AnyStr):
@@ -120,9 +131,9 @@ class Graph:
             self.column_gtypes[column] = new_types[index]
             index += 1
 
-    def scale(self, plot: plt.Subplot):
-        plot.set_xlim(left=self.xmin, right=self.xmax)
-        plot.set_ylim(bottom=self.ymin, top=self.ymax)
+    def reset_x(self):
+        self.xmin = self.dataset.data_frame[self.dataset.ax].min()
+        self.xmax = self.dataset.data_frame[self.dataset.ax].max()
 
     def set_scale(self, xmin: Number = None, xmax: Number = None, ymin: Number = None, ymax: Number = None,
                   auto: bool = False):

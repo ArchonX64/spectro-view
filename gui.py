@@ -7,7 +7,6 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from typing import Union, AnyStr, Callable
 from tkinter import filedialog, messagebox
-from pickle import dump, load
 
 import pandas as pd
 from matplotlib.backends.backend_tkagg import (
@@ -26,13 +25,13 @@ def error(message: Union[AnyStr, int]):
 
 # A basic extension of Tk root class to incorporate some useful functions
 class RootExpansion(tk.Tk):
-    if "win" in sys.platform:  # Code to obtain taskbar height on windows
+    if "win" in sys.platform:  # Code to obtain taskbar height on Windows
         monitor_info = GetMonitorInfo(MonitorFromPoint((0, 0)))
         work_area = monitor_info.get("Work")
         monitor_area = monitor_info.get("Monitor")
         TASKBAR_HEIGHT = monitor_area[3] - work_area[3]
     else:
-        TASKBAR_HEIGHT = 40  # Very generalized taskbar height estimate if it can't be found
+        TASKBAR_HEIGHT = 40  # Very generalized taskbar height estimate if not a Windows platform
 
     def __init__(self):
         super().__init__()
@@ -64,6 +63,7 @@ class App(RootExpansion):
         super().__init__()
         self.app_width = self.percent_width(80)
         self.app_height = self.percent_height(80)
+        self.shift_pressed = False
 
         # Add members
         self.file_manager = utils.FileManager(self)
@@ -90,59 +90,52 @@ class App(RootExpansion):
         self.config(menu=self.menubar)
         self.protocol("WM_DELETE_WINDOW", self.quit)
         self.center_root(width=self.app_width, height=self.app_height)
-        self.bind("<Key>", self.typed)
-
-    # Called in order to start app
-    def startup(self):
-        self.mainloop()
+        self.bind("<KeyPress>", self.key_press)
 
     # Called when "Open" is clicked, starts the sequence of opening a file and turning it into pandas DataFrame
     def import_file_command(self):
-        try:
-            self.file_manager.add_and_gen(path=tk.filedialog.askopenfilename())
-        except ValueError:
-            error("This file is not in an acceptable format!\n"
-                  "Please consult the user guide for accepted file formats")
+        self.file_manager.add_and_gen(path=tk.filedialog.askopenfilename())
 
     def export_dataset(self):
         ExportDataWin(dataset=self.sidebar.get_pressed())
 
     def export_graph(self):
-        ExportGraphWin(graph=self.sidebar.get_pressed())
+        ExportGraphWin(graph_dat=self.sidebar.get_pressed())
 
     # Handles keyboard shortcuts
-    def typed(self, event):
+    def key_press(self, event):
         if self.main_pic.is_graphed:
             gr = self.sidebar.get_pressed().graph
-            if event.char == 'a':
-                diff = (gr.xmax - gr.xmin) * 0.05
+            scale = 0.5 if self.shift_pressed else 0.05
+            if 'a' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale
                 gr.set_scale(xmin=gr.xmin - diff, xmax=gr.xmax - diff)
-            elif event.char == 's':
-                diff = (gr.xmax - gr.xmin) * 0.05
+            elif 's' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale
                 gr.set_scale(xmin=gr.xmin + diff, xmax=gr.xmax + diff)
-            elif event.char == 'q':
-                diff = (gr.xmax - gr.xmin) * 0.05
+            elif 'q' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale
                 gr.set_scale(xmin=gr.xmin - diff, xmax=gr.xmax + diff)
-            elif event.char == 'e':
-                diff = (gr.xmax - gr.xmin) * 0.05
+            elif 'e' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale
                 gr.set_scale(xmin=gr.xmin + diff, xmax=gr.xmax - diff)
-            elif event.char == 'w':
-                diff = (gr.ymax - gr.ymin) * 0.05
-                gr.set_scale(ymax=gr.ymax - diff)
-            elif event.char == 'z':
-                diff = (gr.ymax - gr.ymin) * 0.05
-                gr.set_scale(ymax=gr.ymax + diff)
-            elif event.char == 'k':
-                diff = (gr.xmax - gr.xmin) * 0.005
+            elif 'w' in event.keysym:
+                diff = (gr.ymax - gr.ymin) * scale
+                gr.set_scale(ymax=gr.ymax - diff, ymin=-(gr.ymax - diff) * 0.1)
+            elif 'z' in event.keysym:
+                diff = (gr.ymax - gr.ymin) * scale
+                gr.set_scale(ymax=gr.ymax + diff, ymin=-(gr.ymax + diff) * 0.1)
+            elif 'k' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale * 0.1
                 gr.set_scale(xmin=gr.xmin - diff, xmax=gr.xmax - diff)
-            elif event.char == 'l':
-                diff = (gr.xmax - gr.xmin) * 0.005
+            elif 'l' in event.keysym:
+                diff = (gr.xmax - gr.xmin) * scale * 0.1
                 gr.set_scale(xmin=gr.xmin + diff, xmax=gr.xmax + diff)
-            elif event.char == "2":
-                diff = (gr.ymax - gr.ymin) * 0.005
+            elif '2' in event.keysym:
+                diff = (gr.ymax - gr.ymin) * scale * 0.1
                 gr.set_scale(ymin=gr.ymin - diff, ymax=gr.ymax - diff)
-            elif event.char == "3":
-                diff = (gr.ymax - gr.ymin) * 0.005
+            elif '3' in event.keysym:
+                diff = (gr.ymax - gr.ymin) * scale * 0.1
                 gr.set_scale(ymin=gr.ymin + diff, ymax=gr.ymax + diff)
             self.main_pic.update_graph()
 
@@ -422,6 +415,8 @@ class MainPic(tk.Frame):
         self.mainpic_height = self.root.percent_height(68)
         self.config(bg="white")
 
+        self.graph_canvas.figure.canvas.mpl_connect('button_press_event', self.click_callback)
+
     # Graph the selected DataFrame
     def graph_selected(self, dataset: data.Data):
         self.is_graphed = True
@@ -430,6 +425,9 @@ class MainPic(tk.Frame):
 
     def update_graph(self):
         self.graph_canvas.graph()
+
+    def click_callback(self, event):
+        print(event.xdata, event.ydata)
 
 
 # Changes how the data is viewed in the MatplotLib window
@@ -531,6 +529,7 @@ class ExcelFrame(tk.Frame):
 
         # Customization
         self.bind('<KeyPress>', self.on_press)
+        self.bind('<KeyReleased>')
 
         self.focus_force()
 
