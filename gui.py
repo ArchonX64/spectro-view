@@ -415,8 +415,6 @@ class MainPic(tk.Frame):
         self.mainpic_height = self.root.percent_height(68)
         self.config(bg="white")
 
-        self.graph_canvas.figure.canvas.mpl_connect('button_press_event', self.click_callback)
-
     # Graph the selected DataFrame
     def graph_selected(self, dataset: data.Data):
         self.is_graphed = True
@@ -425,10 +423,7 @@ class MainPic(tk.Frame):
 
     def update_graph(self):
         self.graph_canvas.graph()
-
-    def click_callback(self, event):
-        print(event.xdata, event.ydata)
-
+        
 
 # Changes how the data is viewed in the MatplotLib window
 class GraphTypeWin(RootExpansion):
